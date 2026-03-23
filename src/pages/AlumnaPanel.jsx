@@ -21,7 +21,6 @@ export default function AlumnaPanel() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f7f2' }}>
-      {/* Navbar */}
       <nav className="navbar">
         <span className="navbar-brand">ANIMA PILATES</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -35,7 +34,6 @@ export default function AlumnaPanel() {
       </nav>
 
       <div className="page-container">
-        {/* Alerta de bloqueo */}
         {bloqueada && (
           <div className="alert alert-error" style={{ fontSize: '1rem', marginBottom: 20 }}>
             🚫 <strong>Tu cuenta está bloqueada.</strong>{' '}
@@ -49,7 +47,6 @@ export default function AlumnaPanel() {
           </div>
         )}
 
-        {/* Tabs */}
         <div className="tabs">
           <button className={`tab ${tab === 'reservar' ? 'active' : ''}`} onClick={() => setTab('reservar')}>
             📅 Reservar
