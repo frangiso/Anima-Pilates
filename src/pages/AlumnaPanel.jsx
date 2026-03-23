@@ -17,6 +17,7 @@ export default function AlumnaPanel() {
     navigate('/')
   }
 
+  
   const bloqueada = perfil?.deuda || perfil?.estado === 'inactiva'
 
   return (
