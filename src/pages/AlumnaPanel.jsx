@@ -3,9 +3,9 @@ import { signOut } from 'firebase/auth'
 import { useNavigate } from 'react-router-dom'
 import { auth } from '../firebase'
 import { useAuth } from '../context/AuthContext'
-import MiPlan from '../components/MiPlan'
-import ReservarTurno from '../components/ReservarTurno'
-import MisReservas from '../components/MisReservas'
+import MiPlan from '../components/MiPlan.jsx'
+import ReservarTurno from '../components/ReservarTurno.jsx'
+import MisReservas from '../components/MisReservas.jsx'
 
 export default function AlumnaPanel() {
   const { perfil } = useAuth()
