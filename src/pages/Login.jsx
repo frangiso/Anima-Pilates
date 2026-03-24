@@ -21,7 +21,7 @@ export default function Login() {
     setLoading(true)
     try {
       const cred = await signInWithEmailAndPassword(auth, email.trim(), pass)
-      const snap = await getDoc(doc(db, 'users', cred.user.uid))
+      const snap = await getDoc(doc(db, 'usuarios', cred.user.uid))
       if (!snap.exists()) { setError('Usuario no encontrado.'); setLoading(false); return }
       const perfil = snap.data()
       if (perfil.rol === 'profe') navigate('/profe')
