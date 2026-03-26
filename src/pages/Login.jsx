@@ -19,7 +19,6 @@ export default function Login() {
   const esProfe = params.get('rol') === 'profe'
   const { user, perfil, loading: authLoading } = useAuth()
 
-  // Si ya está logueado, redirigir directamente
   useEffect(() => {
     if (!authLoading && user && perfil) {
       if (perfil.rol === 'profe') navigate('/profe', { replace: true })
@@ -37,25 +36,43 @@ export default function Login() {
         navigate('/profe', { replace: true })
         return
       }
-      // Alumna: buscar email por nombre + apellido
+
+      // Buscar solo por nombre (un solo where, sin índice compuesto)
       const q = query(
         collection(db, 'usuarios'),
-        where('nombre', '==', nombre.trim()),
-        where('apellido', '==', apellido.trim()),
-        where('rol', '==', 'alumna')
+        where('nombre', '==', nombre.trim())
       )
       const snap = await getDocs(q)
+
       if (snap.empty) {
+        setError('No encontramos una alumna con ese nombre. Revisá que esté bien escrito.')
+        setLoading(false)
+        return
+      }
+
+      // Filtrar por apellido y rol en el cliente (evita necesidad de índice)
+      const coincidencias = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(u =>
+          u.apellido?.toLowerCase() === apellido.trim().toLowerCase() &&
+          u.rol === 'alumna'
+        )
+
+      if (coincidencias.length === 0) {
         setError('No encontramos una alumna con ese nombre y apellido. Revisá los datos.')
         setLoading(false)
         return
       }
-      const perfilData = snap.docs[0].data()
+
+      const perfilData = coincidencias[0]
       await signInWithEmailAndPassword(auth, perfilData.email, pass)
       navigate('/alumna', { replace: true })
     } catch (err) {
+      console.error(err.code, err.message)
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setError('Contraseña incorrecta. Revisá los datos.')
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Demasiados intentos. Esperá unos minutos o usá "Olvidé mi contraseña".')
       } else {
         setError('Error al ingresar. Revisá los datos.')
       }
@@ -102,24 +119,21 @@ export default function Login() {
               {error && <div className="alert alert-error">{error}</div>}
 
               {esProfe ? (
-                <>
-                  <div className="input-group">
-                    <label>Correo electrónico</label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      placeholder="tucorreo@email.com"
-                      required
-                      autoComplete="username"
-                    />
-                  </div>
-                </>
+                <div className="input-group">
+                  <label>Correo electrónico</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="tucorreo@email.com"
+                    required
+                    autoComplete="username"
+                  />
+                </div>
               ) : (
                 <>
-                  {/* Campo trampa para engañar al autocompletado del navegador */}
-                  <input type="text" name="fake_user" style={{ display: 'none' }} readOnly />
-                  <input type="password" name="fake_pass" style={{ display: 'none' }} readOnly />
+                  <input type="text" style={{ display: 'none' }} readOnly />
+                  <input type="password" style={{ display: 'none' }} readOnly />
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
                     <div className="input-group">
                       <label>Nombre</label>
@@ -129,8 +143,7 @@ export default function Login() {
                         onChange={e => setNombre(e.target.value)}
                         placeholder="María"
                         required
-                        autoComplete="given-name"
-                        name="alumna_nombre"
+                        autoComplete="off"
                       />
                     </div>
                     <div className="input-group">
@@ -141,8 +154,7 @@ export default function Login() {
                         onChange={e => setApellido(e.target.value)}
                         placeholder="García"
                         required
-                        autoComplete="family-name"
-                        name="alumna_apellido"
+                        autoComplete="off"
                       />
                     </div>
                   </div>
@@ -158,11 +170,11 @@ export default function Login() {
                   placeholder="••••••••"
                   required
                   autoComplete="current-password"
-                  name="alumna_pass"
                 />
               </div>
 
-              <button className="btn btn-primary" type="submit" disabled={loading} style={{ width: '100%', marginTop: 8 }}>
+              <button className="btn btn-primary" type="submit" disabled={loading}
+                style={{ width: '100%', marginTop: 8 }}>
                 {loading ? 'Ingresando...' : 'Ingresar'}
               </button>
 
