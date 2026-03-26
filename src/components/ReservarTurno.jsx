@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 
@@ -21,21 +21,15 @@ function getLunes(fecha) {
   return d
 }
 
-function fechaISO(d) {
-  return d.toISOString().split('T')[0]
-}
-
-function addDays(d, n) {
-  const r = new Date(d)
-  r.setDate(r.getDate() + n)
-  return r
-}
+function fechaISO(d) { return d.toISOString().split('T')[0] }
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
 
 export default function ReservarTurno({ bloqueada }) {
   const { user, perfil } = useAuth()
   const [semana, setSemana] = useState(getLunes(new Date()))
   const [reservas, setReservas] = useState({})
   const [misReservas, setMisReservas] = useState({})
+  const [feriados, setFeriados] = useState([])
   const [cargando, setCargando] = useState(true)
   const [modal, setModal] = useState(null)
   const [guardando, setGuardando] = useState(false)
@@ -44,20 +38,21 @@ export default function ReservarTurno({ bloqueada }) {
 
   const horas = getHoras()
 
-  useEffect(() => {
-    cargarSemana()
-  }, [semana])
+  useEffect(() => { cargarSemana() }, [semana])
 
   async function cargarSemana() {
     setCargando(true)
     const fechas = DIAS.map((_, i) => fechaISO(addDays(semana, i)))
-    const snap = await getDocs(query(collection(db, 'reservas'),
-      where('fecha', 'in', fechas),
-      where('estado', 'in', ['confirmada', 'pendiente'])
-    ))
+    const [snapRes, snapFer] = await Promise.all([
+      getDocs(query(collection(db, 'reservas'),
+        where('fecha', 'in', fechas),
+        where('estado', 'in', ['confirmada', 'pendiente'])
+      )),
+      getDocs(collection(db, 'feriados'))
+    ])
     const mapa = {}
     const mias = {}
-    snap.forEach(d => {
+    snapRes.forEach(d => {
       const r = d.data()
       const key = `${r.fecha}_${r.hora}`
       mapa[key] = (mapa[key] || 0) + 1
@@ -65,6 +60,7 @@ export default function ReservarTurno({ bloqueada }) {
     })
     setReservas(mapa)
     setMisReservas(mias)
+    setFeriados(snapFer.docs.map(d => d.data().fecha))
     setCargando(false)
   }
 
@@ -73,6 +69,8 @@ export default function ReservarTurno({ bloqueada }) {
     const key = `${fecha}_${hora}`
     const ocupados = reservas[key] || 0
     const mia = misReservas[key]
+    const esFeriado = feriados.includes(fecha)
+    if (esFeriado) return { estado: 'feriado', key, fecha, hora }
     if (mia) return { estado: 'mia', key, fecha, hora, reservaId: mia.id, estadoReserva: mia.estado }
     if (ocupados >= CUPOS_MAX) return { estado: 'lleno', key, fecha, hora }
     return { estado: 'libre', key, fecha, hora, cuposLibres: CUPOS_MAX - ocupados }
@@ -93,7 +91,6 @@ export default function ReservarTurno({ bloqueada }) {
         estado: tipoReserva === 'fija' ? 'pendiente' : 'confirmada',
         creadoEn: serverTimestamp()
       })
-      // Notificación
       await addDoc(collection(db, 'notificaciones'), {
         tipo: tipoReserva === 'fija' ? 'turno_fijo_solicitado' : 'nueva_reserva',
         titulo: tipoReserva === 'fija' ? 'Solicitud de turno fijo' : 'Nueva reserva',
@@ -125,8 +122,8 @@ export default function ReservarTurno({ bloqueada }) {
           <button className="btn btn-ghost" onClick={() => setSemana(addDays(semana, -7))}
             disabled={!semanaAnteriorHabilitada} style={{ padding: '8px 14px', minHeight: 38 }}>← Anterior</button>
           <span style={{ fontSize: '0.9rem', color: '#5a6b60', fontWeight: 700 }}>
-            {addDays(semana, 0).toLocaleDateString('es-AR', { day:'numeric', month:'short' })} –{' '}
-            {addDays(semana, 4).toLocaleDateString('es-AR', { day:'numeric', month:'short' })}
+            {addDays(semana, 0).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} –{' '}
+            {addDays(semana, 4).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
           </span>
           <button className="btn btn-ghost" onClick={() => setSemana(addDays(semana, 7))}
             style={{ padding: '8px 14px', minHeight: 38 }}>Siguiente →</button>
@@ -144,7 +141,6 @@ export default function ReservarTurno({ bloqueada }) {
         <div className="alert alert-error">🚫 No podés reservar turnos hasta regularizar tu situación.</div>
       ) : (
         <>
-          {/* Leyenda */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap', fontSize: '0.85rem' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 14, height: 14, borderRadius: 4, background: '#d4edda', border: '1px solid #b8ddc4', display: 'inline-block' }} /> Libre
@@ -153,21 +149,26 @@ export default function ReservarTurno({ bloqueada }) {
               <span style={{ width: 14, height: 14, borderRadius: 4, background: '#4a7c59', display: 'inline-block' }} /> Mi turno
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 14, height: 14, borderRadius: 4, background: '#fde8e8', border: '1px solid #f5c6c6', display: 'inline-block' }} /> Lleno
+              <span style={{ width: 14, height: 14, borderRadius: 4, background: '#fde8e8', border: '1px solid #f5c6c6', display: 'inline-block' }} /> Lleno / Feriado
             </span>
           </div>
 
           <div style={{ overflowX: 'auto' }}>
             <div className="grilla-semana">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
-              {DIAS.map((dia, i) => (
-                <div key={dia} className="grilla-header">
-                  {dia}<br />
-                  <span style={{ fontSize: '0.78rem', opacity: 0.85 }}>
-                    {addDays(semana, i).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
-                  </span>
-                </div>
-              ))}
+              {DIAS.map((dia, i) => {
+                const fecha = fechaISO(addDays(semana, i))
+                const esFeriado = feriados.includes(fecha)
+                return (
+                  <div key={dia} className="grilla-header" style={{ background: esFeriado ? '#c0392b' : undefined }}>
+                    {dia}<br />
+                    <span style={{ fontSize: '0.78rem', opacity: 0.85 }}>
+                      {addDays(semana, i).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                    </span>
+                    {esFeriado && <div style={{ fontSize: '0.65rem' }}>Feriado</div>}
+                  </div>
+                )
+              })}
               {horas.map(hora => (
                 <>
                   <div key={`h${hora}`} className="grilla-hora">{hora}</div>
@@ -175,8 +176,10 @@ export default function ReservarTurno({ bloqueada }) {
                     const celda = getCelda(di, hora)
                     const fechaDia = fechaISO(addDays(semana, di))
                     const pasado = fechaDia < hoy
-                    if (pasado) return (
-                      <div key={`${di}_${hora}`} className="turno-cell turno-bloqueado" />
+
+                    if (pasado || celda.estado === 'feriado') return (
+                      <div key={`${di}_${hora}`} className="turno-cell turno-bloqueado"
+                        style={{ background: celda.estado === 'feriado' ? '#fde8e8' : undefined }} />
                     )
                     if (celda.estado === 'mia') return (
                       <div key={celda.key} className="turno-cell turno-reservado">
@@ -206,7 +209,6 @@ export default function ReservarTurno({ bloqueada }) {
         </>
       )}
 
-      {/* Modal confirmación */}
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -215,7 +217,6 @@ export default function ReservarTurno({ bloqueada }) {
               📅 {new Date(modal.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}<br />
               🕐 {modal.hora} hs
             </p>
-
             <div className="input-group">
               <label>Tipo de reserva</label>
               <select value={tipoReserva} onChange={e => setTipoReserva(e.target.value)}>
@@ -223,20 +224,16 @@ export default function ReservarTurno({ bloqueada }) {
                 <option value="fija">Turno fijo semanal (necesita aprobación)</option>
               </select>
             </div>
-
             {tipoReserva === 'fija' && (
               <div className="alert alert-info" style={{ fontSize: '0.88rem' }}>
-                💡 Los turnos fijos quedan pendientes hasta que la profesora los apruebe. Te avisaremos.
+                💡 Los turnos fijos quedan pendientes hasta que la profesora los apruebe.
               </div>
             )}
-
             <div className="modal-actions">
               <button className="btn btn-primary" onClick={confirmarReserva} disabled={guardando} style={{ flex: 1 }}>
                 {guardando ? 'Guardando...' : 'Confirmar'}
               </button>
-              <button className="btn btn-ghost" onClick={() => setModal(null)} style={{ flex: 1 }}>
-                Cancelar
-              </button>
+              <button className="btn btn-ghost" onClick={() => setModal(null)} style={{ flex: 1 }}>Cancelar</button>
             </div>
           </div>
         </div>
