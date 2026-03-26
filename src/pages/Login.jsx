@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import { collection, query, where, getDocs } from 'firebase/firestore'
 import { auth, db } from '../firebase'
+import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
   const [nombre, setNombre] = useState('')
@@ -16,6 +17,15 @@ export default function Login() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const esProfe = params.get('rol') === 'profe'
+  const { user, perfil, loading: authLoading } = useAuth()
+
+  // Si ya está logueado, redirigir directamente
+  useEffect(() => {
+    if (!authLoading && user && perfil) {
+      if (perfil.rol === 'profe') navigate('/profe', { replace: true })
+      else navigate('/alumna', { replace: true })
+    }
+  }, [user, perfil, authLoading])
 
   async function handleLogin(e) {
     e.preventDefault()
@@ -23,9 +33,8 @@ export default function Login() {
     setLoading(true)
     try {
       if (esProfe) {
-        // Profe ingresa con email directamente
-        const cred = await signInWithEmailAndPassword(auth, email.trim(), pass)
-        navigate('/profe')
+        await signInWithEmailAndPassword(auth, email.trim(), pass)
+        navigate('/profe', { replace: true })
         return
       }
       // Alumna: buscar email por nombre + apellido
@@ -41,9 +50,9 @@ export default function Login() {
         setLoading(false)
         return
       }
-      const perfil = snap.docs[0].data()
-      await signInWithEmailAndPassword(auth, perfil.email, pass)
-      navigate('/alumna')
+      const perfilData = snap.docs[0].data()
+      await signInWithEmailAndPassword(auth, perfilData.email, pass)
+      navigate('/alumna', { replace: true })
     } catch (err) {
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setError('Contraseña incorrecta. Revisá los datos.')
@@ -66,6 +75,8 @@ export default function Login() {
     }
   }
 
+  if (authLoading) return <div className="spinner" style={{ minHeight: '100vh' }} />
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -87,34 +98,68 @@ export default function Login() {
 
         <div className="card">
           {!modoReset ? (
-            <form onSubmit={handleLogin}>
+            <form onSubmit={handleLogin} autoComplete="off">
               {error && <div className="alert alert-error">{error}</div>}
 
               {esProfe ? (
-                <div className="input-group">
-                  <label>Correo electrónico</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                    placeholder="tucorreo@email.com" required autoComplete="email" />
-                </div>
+                <>
+                  <div className="input-group">
+                    <label>Correo electrónico</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="tucorreo@email.com"
+                      required
+                      autoComplete="username"
+                    />
+                  </div>
+                </>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-                  <div className="input-group">
-                    <label>Nombre</label>
-                    <input type="text" value={nombre} onChange={e => setNombre(e.target.value)}
-                      placeholder="María" required autoComplete="given-name" />
+                <>
+                  {/* Campo trampa para engañar al autocompletado del navegador */}
+                  <input type="text" name="fake_user" style={{ display: 'none' }} readOnly />
+                  <input type="password" name="fake_pass" style={{ display: 'none' }} readOnly />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+                    <div className="input-group">
+                      <label>Nombre</label>
+                      <input
+                        type="text"
+                        value={nombre}
+                        onChange={e => setNombre(e.target.value)}
+                        placeholder="María"
+                        required
+                        autoComplete="given-name"
+                        name="alumna_nombre"
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label>Apellido</label>
+                      <input
+                        type="text"
+                        value={apellido}
+                        onChange={e => setApellido(e.target.value)}
+                        placeholder="García"
+                        required
+                        autoComplete="family-name"
+                        name="alumna_apellido"
+                      />
+                    </div>
                   </div>
-                  <div className="input-group">
-                    <label>Apellido</label>
-                    <input type="text" value={apellido} onChange={e => setApellido(e.target.value)}
-                      placeholder="García" required autoComplete="family-name" />
-                  </div>
-                </div>
+                </>
               )}
 
               <div className="input-group">
                 <label>Contraseña</label>
-                <input type="password" value={pass} onChange={e => setPass(e.target.value)}
-                  placeholder="••••••••" required autoComplete="current-password" />
+                <input
+                  type="password"
+                  value={pass}
+                  onChange={e => setPass(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="current-password"
+                  name="alumna_pass"
+                />
               </div>
 
               <button className="btn btn-primary" type="submit" disabled={loading} style={{ width: '100%', marginTop: 8 }}>
