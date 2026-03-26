@@ -9,6 +9,7 @@ import GestionAlumnas from '../components/GestionAlumnas'
 import GestionPagos from '../components/GestionPagos'
 import GestionTurnos from '../components/GestionTurnos'
 import Notificaciones from '../components/Notificaciones'
+import HistorialAsistencias from '../components/HistorialAsistencias'
 
 export default function ProfePanel() {
   const { perfil } = useAuth()
@@ -55,6 +56,9 @@ export default function ProfePanel() {
           <button className={`tab ${tab === 'pagos' ? 'active' : ''}`} onClick={() => setTab('pagos')}>
             💰 Pagos
           </button>
+          <button className={`tab ${tab === 'historial' ? 'active' : ''}`} onClick={() => setTab('historial')}>
+            📋 Historial
+          </button>
           <button className={`tab ${tab === 'notif' ? 'active' : ''}`} onClick={() => setTab('notif')}>
             🔔 Avisos
             {notifNoLeidas > 0 && <span className="notif-dot" />}
@@ -65,6 +69,7 @@ export default function ProfePanel() {
         {tab === 'alumnas' && <GestionAlumnas />}
         {tab === 'turnos' && <GestionTurnos />}
         {tab === 'pagos' && <GestionPagos />}
+        {tab === 'historial' && <HistorialAsistencias />}
         {tab === 'notif' && <Notificaciones />}
       </div>
     </div>
