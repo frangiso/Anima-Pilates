@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, getDocs, doc, updateDoc, query, orderBy, Timestamp } from 'firebase/firestore'
+import { collection, getDocs, doc, updateDoc, deleteDoc, query, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 
 const PLANES = ['Plan mensual — 2 veces/semana', 'Plan mensual — 3 veces/semana', 'Plan mensual — libre', 'Pack 8 clases', 'Pack 12 clases', 'Clase suelta']
@@ -9,6 +9,7 @@ export default function GestionAlumnas() {
   const [cargando, setCargando] = useState(true)
   const [busqueda, setBusqueda] = useState('')
   const [editando, setEditando] = useState(null)
+  const [eliminando, setEliminando] = useState(null)
   const [form, setForm] = useState({})
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -62,6 +63,16 @@ export default function GestionAlumnas() {
     setGuardando(false)
   }
 
+  async function confirmarEliminar() {
+    if (!eliminando) return
+    setGuardando(true)
+    await deleteDoc(doc(db, 'usuarios', eliminando.id))
+    setMsg({ tipo: 'exito', texto: `${eliminando.nombre} ${eliminando.apellido} fue eliminada.` })
+    setEliminando(null)
+    await cargar()
+    setGuardando(false)
+  }
+
   const filtradas = alumnas
     .filter(a => {
       const texto = `${a.nombre} ${a.apellido} ${a.email}`.toLowerCase()
@@ -87,7 +98,6 @@ export default function GestionAlumnas() {
         </div>
       )}
 
-      {/* Filtros */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         <input
           style={{ flex: 1, minWidth: 200, padding: '10px 14px', border: '2px solid #c8ddd0', borderRadius: 8, fontSize: '0.95rem', fontFamily: 'Lato, sans-serif' }}
@@ -148,10 +158,16 @@ export default function GestionAlumnas() {
                     </div>
                   </td>
                   <td>
-                    <button className="btn btn-secondary" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.88rem' }}
-                      onClick={() => abrirEdicion(a)}>
-                      Editar
-                    </button>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button className="btn btn-secondary" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.88rem' }}
+                        onClick={() => abrirEdicion(a)}>
+                        Editar
+                      </button>
+                      <button className="btn btn-danger" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
+                        onClick={() => setEliminando(a)}>
+                        Eliminar
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -212,6 +228,29 @@ export default function GestionAlumnas() {
                 {guardando ? 'Guardando...' : 'Guardar cambios'}
               </button>
               <button className="btn btn-ghost" onClick={() => setEditando(null)} style={{ flex: 1 }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmación eliminar */}
+      {eliminando && (
+        <div className="modal-overlay" onClick={() => setEliminando(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3 style={{ color: '#c0392b' }}>Eliminar alumna</h3>
+            <p style={{ color: '#5a6b60', margin: '16px 0' }}>
+              ¿Estás segura que querés eliminar a <strong>{eliminando.nombre} {eliminando.apellido}</strong>?
+            </p>
+            <div className="alert alert-error" style={{ fontSize: '0.9rem' }}>
+              ⚠️ Esta acción no se puede deshacer. Se eliminará el perfil de la alumna pero sus reservas pasadas quedarán en el historial.
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-danger" onClick={confirmarEliminar} disabled={guardando} style={{ flex: 1 }}>
+                {guardando ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+              <button className="btn btn-ghost" onClick={() => setEliminando(null)} style={{ flex: 1 }}>
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
