@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 
@@ -31,51 +31,45 @@ export default function Login() {
     setLoading(true)
     try {
       if (esProfe) {
-        // Profe entra con email
-        const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), pass)
+        await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), pass)
         navigate('/profe', { replace: true })
         return
       }
 
-      // Alumna: buscar por teléfono (solo un where, sin índice)
-      const telLimpio = telefono.trim().replace(/\s/g, '')
-      const snap = await getDocs(query(
-        collection(db, 'usuarios'),
-        where('telefono', '==', telLimpio)
-      ))
+      // Traer TODOS los usuarios y filtrar en el cliente
+      // Así evitamos cualquier problema de índices o queries
+      const telBuscado = telefono.trim().replace(/\s/g, '')
+      const snap = await getDocs(collection(db, 'usuarios'))
+      
+      const alumna = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .find(u => {
+          if (u.rol !== 'alumna') return false
+          const telGuardado = (u.telefono || '').replace(/\s/g, '')
+          // Comparar con y sin 0 adelante
+          return (
+            telGuardado === telBuscado ||
+            telGuardado === '0' + telBuscado ||
+            '0' + telGuardado === telBuscado
+          )
+        })
 
-      // Si no encontró, intentar con espacios tal como se guardó
-      let encontrado = snap.docs[0]
-      if (!encontrado) {
-        const snap2 = await getDocs(query(
-          collection(db, 'usuarios'),
-          where('telefono', '==', telefono.trim())
-        ))
-        encontrado = snap2.docs[0]
-      }
-
-      if (!encontrado) {
+      if (!alumna) {
         setError('No encontramos una alumna con ese teléfono. Revisá el número.')
         setLoading(false)
         return
       }
 
-      const perfilData = encontrado.data()
-      if (perfilData.rol !== 'alumna') {
-        setError('Ese teléfono no corresponde a una alumna.')
-        setLoading(false)
-        return
-      }
-
-      await signInWithEmailAndPassword(auth, perfilData.email, pass)
+      await signInWithEmailAndPassword(auth, alumna.email, pass)
       navigate('/alumna', { replace: true })
+
     } catch (err) {
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-        setError('Contraseña incorrecta. Revisá los datos.')
+        setError('Contraseña incorrecta.')
       } else if (err.code === 'auth/too-many-requests') {
-        setError('Demasiados intentos. Esperá unos minutos o contactá a la profesora.')
+        setError('Demasiados intentos. Esperá unos minutos.')
       } else {
-        setError('Error al ingresar. Revisá los datos.')
+        setError('Error al ingresar: ' + err.code)
       }
       setLoading(false)
     }
@@ -87,7 +81,7 @@ export default function Login() {
     setError('')
     try {
       await sendPasswordResetEmail(auth, email.trim())
-      setResetMsg('Te enviamos un email para restablecer tu contraseña. Revisá tu correo.')
+      setResetMsg('Te enviamos un email para restablecer tu contraseña.')
     } catch {
       setError('No encontramos ese correo.')
     }
@@ -130,7 +124,8 @@ export default function Login() {
                     placeholder="Ej: 2664123456"
                     required
                     autoComplete="off"
-                    style={{ fontSize: '1.2rem', letterSpacing: '0.05em' }}
+                    inputMode="numeric"
+                    style={{ fontSize: '1.3rem', letterSpacing: '0.08em' }}
                   />
                   <span style={{ fontSize: '0.82rem', color: '#5a6b60', marginTop: 4 }}>
                     El mismo número que diste al registrarte
@@ -147,7 +142,7 @@ export default function Login() {
                   placeholder="••••••••"
                   required
                   autoComplete="current-password"
-                  style={{ fontSize: '1.2rem', letterSpacing: '0.1em' }}
+                  style={{ fontSize: '1.2rem' }}
                 />
               </div>
 
