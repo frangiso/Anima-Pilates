@@ -26,12 +26,13 @@ export default function MisReservas() {
     setCargando(false)
   }
 
-  async function cancelar(id, fecha) {
+  async function cancelar(id, fecha, hora) {
     const hoy = new Date()
-    const fechaTurno = new Date(fecha + 'T12:00')
+    const hs = hora ? hora.split(':')[0] : '12'
+    const fechaTurno = new Date(fecha + 'T' + hs.padStart(2,'0') + ':00:00')
     const diffHs = (fechaTurno - hoy) / (1000 * 60 * 60)
-    if (diffHs < 24) {
-      setMsg({ tipo: 'error', texto: 'No podés cancelar con menos de 24 horas de anticipación. Avisale a la profesora directamente.' })
+    if (diffHs < 2) {
+      setMsg({ tipo: 'error', texto: 'No podés cancelar con menos de 2 horas de anticipación. La clase se da por perdida.' })
       return
     }
     setCancelando(id)
@@ -71,8 +72,9 @@ export default function MisReservas() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {proximas.map(r => {
               const fechaStr = new Date(r.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
-              const diffHs = (new Date(r.fecha + 'T12:00') - new Date()) / (1000 * 60 * 60)
-              const puedeCancelar = diffHs >= 24
+              const hs = r.hora ? r.hora.split(':')[0].padStart(2,'0') : '12'
+              const diffHs = (new Date(r.fecha + 'T' + hs + ':00:00') - new Date()) / (1000 * 60 * 60)
+              const puedeCancelar = diffHs >= 2
               return (
                 <div key={r.id} style={{
                   display: 'flex',
@@ -100,7 +102,7 @@ export default function MisReservas() {
                       <button
                         className="btn btn-ghost"
                         style={{ padding: '6px 12px', minHeight: 34, fontSize: '0.85rem' }}
-                        onClick={() => cancelar(r.id, r.fecha)}
+                        onClick={() => cancelar(r.id, r.fecha, r.hora)}
                         disabled={cancelando === r.id}
                       >
                         {cancelando === r.id ? '...' : 'Cancelar'}
