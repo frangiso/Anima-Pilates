@@ -64,6 +64,12 @@ export default function ReservarTurno({ bloqueada }) {
     setCargando(false)
   }
 
+  function esBloqueadoFijo(diaIdx, hora) {
+    if ((diaIdx === 1 || diaIdx === 3) && hora === '14:00') return true
+    if ((diaIdx === 0 || diaIdx === 2 || diaIdx === 4) && hora === '12:00') return true
+    return false
+  }
+
   function getCelda(diaIdx, hora) {
     const fecha = fechaISO(addDays(semana, diaIdx))
     const key = `${fecha}_${hora}`
@@ -71,6 +77,7 @@ export default function ReservarTurno({ bloqueada }) {
     const mia = misReservas[key]
     const esFeriado = feriados.includes(fecha)
     if (esFeriado) return { estado: 'feriado', key, fecha, hora }
+    if (esBloqueadoFijo(diaIdx, hora)) return { estado: 'no-disponible', key, fecha, hora }
     if (mia) return { estado: 'mia', key, fecha, hora, reservaId: mia.id, estadoReserva: mia.estado }
     if (ocupados >= CUPOS_MAX) return { estado: 'lleno', key, fecha, hora }
     return { estado: 'libre', key, fecha, hora, cuposLibres: CUPOS_MAX - ocupados }
@@ -177,6 +184,11 @@ export default function ReservarTurno({ bloqueada }) {
                     const fechaDia = fechaISO(addDays(semana, di))
                     const pasado = fechaDia < hoy
 
+                    if (celda.estado === 'no-disponible') return (
+                      <div key={celda.key} className="turno-cell turno-bloqueado" style={{ background: '#e9ecef', cursor: 'not-allowed' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#adb5bd' }}>No disp.</span>
+                      </div>
+                    )
                     if (pasado || celda.estado === 'feriado') return (
                       <div key={`${di}_${hora}`} className="turno-cell turno-bloqueado"
                         style={{ background: celda.estado === 'feriado' ? '#fde8e8' : undefined }} />
