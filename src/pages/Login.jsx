@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
-  const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [error, setError] = useState('')
@@ -30,46 +29,24 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      if (esProfe) {
-        await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), pass)
-        navigate('/profe', { replace: true })
-        return
-      }
-
-      // Traer TODOS los usuarios y filtrar en el cliente
-      // Así evitamos cualquier problema de índices o queries
-      const telBuscado = telefono.trim().replace(/\s/g, '')
-      const snap = await getDocs(collection(db, 'usuarios'))
-      
-      const alumna = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .find(u => {
-          if (u.rol !== 'alumna') return false
-          const telGuardado = (u.telefono || '').replace(/\s/g, '')
-          // Comparar con y sin 0 adelante
-          return (
-            telGuardado === telBuscado ||
-            telGuardado === '0' + telBuscado ||
-            '0' + telGuardado === telBuscado
-          )
-        })
-
-      if (!alumna) {
-        setError('No encontramos una alumna con ese teléfono. Revisá el número.')
+      // Login directo con email — 1 sola lectura, sin buscar en colección
+      const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), pass)
+      const snap = await getDoc(doc(db, 'usuarios', cred.user.uid))
+      if (!snap.exists()) {
+        setError('Usuario no encontrado. Contactá a la profesora.')
         setLoading(false)
         return
       }
-
-      await signInWithEmailAndPassword(auth, alumna.email, pass)
-      navigate('/alumna', { replace: true })
-
+      const p = snap.data()
+      if (p.rol === 'profe') navigate('/profe', { replace: true })
+      else navigate('/alumna', { replace: true })
     } catch (err) {
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-        setError('Contraseña incorrecta.')
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+        setError('Email o contraseña incorrectos.')
       } else if (err.code === 'auth/too-many-requests') {
         setError('Demasiados intentos. Esperá unos minutos.')
       } else {
-        setError('Error al ingresar: ' + err.code)
+        setError('Error al ingresar. Revisá los datos.')
       }
       setLoading(false)
     }
@@ -81,7 +58,7 @@ export default function Login() {
     setError('')
     try {
       await sendPasswordResetEmail(auth, email.trim())
-      setResetMsg('Te enviamos un email para restablecer tu contraseña.')
+      setResetMsg('Te enviamos un email. Revisá tu correo.')
     } catch {
       setError('No encontramos ese correo.')
     }
@@ -107,32 +84,18 @@ export default function Login() {
           {!modoReset ? (
             <form onSubmit={handleLogin} autoComplete="off">
               {error && <div className="alert alert-error">{error}</div>}
-
-              {esProfe ? (
-                <div className="input-group">
-                  <label>Correo electrónico</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                    placeholder="tucorreo@email.com" required autoComplete="email" />
-                </div>
-              ) : (
-                <div className="input-group">
-                  <label>Tu número de teléfono</label>
-                  <input
-                    type="tel"
-                    value={telefono}
-                    onChange={e => setTelefono(e.target.value)}
-                    placeholder="Ej: 2664123456"
-                    required
-                    autoComplete="off"
-                    inputMode="numeric"
-                    style={{ fontSize: '1.3rem', letterSpacing: '0.08em' }}
-                  />
-                  <span style={{ fontSize: '0.82rem', color: '#5a6b60', marginTop: 4 }}>
-                    El mismo número que diste al registrarte
-                  </span>
-                </div>
-              )}
-
+              <div className="input-group">
+                <label>Correo electrónico</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="tucorreo@email.com"
+                  required
+                  autoComplete="email"
+                  style={{ fontSize: '1.05rem' }}
+                />
+              </div>
               <div className="input-group">
                 <label>Contraseña</label>
                 <input
@@ -142,30 +105,26 @@ export default function Login() {
                   placeholder="••••••••"
                   required
                   autoComplete="current-password"
-                  style={{ fontSize: '1.2rem' }}
+                  style={{ fontSize: '1.1rem' }}
                 />
               </div>
-
               <button className="btn btn-primary" type="submit" disabled={loading}
                 style={{ width: '100%', marginTop: 8, fontSize: '1.1rem' }}>
                 {loading ? 'Ingresando...' : 'Ingresar'}
               </button>
-
-              {!esProfe && (
-                <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.88rem' }}>
-                  <button type="button" onClick={() => setModoReset(true)}
-                    style={{ background: 'none', border: 'none', color: '#5a6b60', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.88rem' }}>
-                    Olvidé mi contraseña
-                  </button>
-                </p>
-              )}
+              <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.88rem' }}>
+                <button type="button" onClick={() => setModoReset(true)}
+                  style={{ background: 'none', border: 'none', color: '#5a6b60', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.88rem' }}>
+                  Olvidé mi contraseña
+                </button>
+              </p>
             </form>
           ) : (
             <form onSubmit={handleReset}>
               {error && <div className="alert alert-error">{error}</div>}
               {resetMsg && <div className="alert alert-exito">{resetMsg}</div>}
               <p style={{ color: '#5a6b60', marginBottom: 18, fontSize: '0.95rem' }}>
-                Ingresá el correo con el que te registraste y te mandamos un link para cambiar la contraseña.
+                Ingresá tu correo y te mandamos un link para cambiar la contraseña.
               </p>
               <div className="input-group">
                 <label>Correo electrónico</label>
@@ -183,15 +142,11 @@ export default function Login() {
               </p>
             </form>
           )}
-
-          {!modoReset && !esProfe && (
-            <p style={{ textAlign: 'center', marginTop: 20, color: '#5a6b60', fontSize: '0.95rem' }}>
-              ¿Es tu primera vez?{' '}
-              <Link to="/registro" style={{ color: '#4a7c59', fontWeight: 700 }}>Registrate acá</Link>
-            </p>
-          )}
+          <p style={{ textAlign: 'center', marginTop: 20, color: '#5a6b60', fontSize: '0.95rem' }}>
+            ¿Es tu primera vez?{' '}
+            <Link to="/registro" style={{ color: '#4a7c59', fontWeight: 700 }}>Registrate acá</Link>
+          </p>
         </div>
-
         <p style={{ textAlign: 'center', marginTop: 20 }}>
           <Link to="/" style={{ color: '#5a6b60', fontSize: '0.9rem' }}>← Volver al inicio</Link>
         </p>
