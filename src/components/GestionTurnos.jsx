@@ -38,6 +38,9 @@ export default function GestionTurnos() {
   const [alumnaSelec, setAlumnaSelec] = useState('')
   const [tipoReserva, setTipoReserva] = useState('unica')
   const [guardando, setGuardando] = useState(false)
+  const [modoExterno, setModoExterno] = useState(false) // true = alumna sin cuenta
+  const [nombreExterno, setNombreExterno] = useState('')
+  const [telefonoExterno, setTelefonoExterno] = useState('')
 
   // Feriados
   const [nuevaFecha, setNuevaFecha] = useState('')
@@ -108,35 +111,57 @@ export default function GestionTurnos() {
   }
 
   async function reservarPorAlumna() {
-    if (!alumnaSelec || !modalReserva) return
-    const alumna = alumnas.find(a => a.id === alumnaSelec)
-    if (!alumna) return
+    if (!modalReserva) return
+    if (modoExterno && !nombreExterno.trim()) return
+    if (!modoExterno && !alumnaSelec) return
     setGuardando(true)
     try {
-      await addDoc(collection(db, 'reservas'), {
-        alumnaId: alumna.id,
-        alumnaNombre: `${alumna.nombre} ${alumna.apellido}`,
-        alumnaEmail: alumna.email,
-        alumnaPhone: alumna.telefono || '',
-        fecha: modalReserva.fecha,
-        hora: modalReserva.hora,
-        tipo: tipoReserva,
-        estado: 'confirmada', // la profe reserva directo, sin pendiente
-        creadaPorProfe: true,
-        creadoEn: serverTimestamp()
-      })
-      // Si es fija, actualizar turnoFijo en el perfil de la alumna
-      if (tipoReserva === 'fija') {
-        const diaStr = new Date(modalReserva.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long' })
-        const turnoActual = alumna.turnoFijo ? alumna.turnoFijo + ' · ' : ''
-        await updateDoc(doc(db, 'usuarios', alumna.id), {
-          turnoFijo: turnoActual + `${diaStr} ${modalReserva.hora}hs`
+      if (modoExterno) {
+        // Alumna sin cuenta — guardar con nombre manual
+        await addDoc(collection(db, 'reservas'), {
+          alumnaId: null,
+          alumnaNombre: nombreExterno.trim(),
+          alumnaEmail: '',
+          alumnaPhone: telefonoExterno.trim(),
+          fecha: modalReserva.fecha,
+          hora: modalReserva.hora,
+          tipo: tipoReserva,
+          estado: 'confirmada',
+          creadaPorProfe: true,
+          sinCuenta: true,
+          creadoEn: serverTimestamp()
         })
+        setMsg({ tipo: 'exito', texto: `Turno reservado para ${nombreExterno.trim()}.` })
+      } else {
+        const alumna = alumnas.find(a => a.id === alumnaSelec)
+        if (!alumna) { setGuardando(false); return }
+        await addDoc(collection(db, 'reservas'), {
+          alumnaId: alumna.id,
+          alumnaNombre: `${alumna.nombre} ${alumna.apellido}`,
+          alumnaEmail: alumna.email,
+          alumnaPhone: alumna.telefono || '',
+          fecha: modalReserva.fecha,
+          hora: modalReserva.hora,
+          tipo: tipoReserva,
+          estado: 'confirmada',
+          creadaPorProfe: true,
+          creadoEn: serverTimestamp()
+        })
+        if (tipoReserva === 'fija') {
+          const diaStr = new Date(modalReserva.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long' })
+          const turnoActual = alumna.turnoFijo ? alumna.turnoFijo + ' · ' : ''
+          await updateDoc(doc(db, 'usuarios', alumna.id), {
+            turnoFijo: turnoActual + `${diaStr} ${modalReserva.hora}hs`
+          })
+        }
+        setMsg({ tipo: 'exito', texto: `Turno reservado para ${alumna.nombre} ${alumna.apellido}.` })
       }
-      setMsg({ tipo: 'exito', texto: `Turno reservado para ${alumna.nombre} ${alumna.apellido}.` })
       setModalReserva(null)
       setAlumnaSelec('')
+      setNombreExterno('')
+      setTelefonoExterno('')
       setTipoReserva('unica')
+      setModoExterno(false)
       await cargar()
     } catch {
       setMsg({ tipo: 'error', texto: 'Error al reservar. Intentá nuevamente.' })
@@ -426,20 +451,53 @@ export default function GestionTurnos() {
               )
             })()}
 
-            <div className="input-group">
-              <label>Alumna</label>
-              <select value={alumnaSelec} onChange={e => setAlumnaSelec(e.target.value)} required>
-                <option value="">— Seleccioná una alumna —</option>
-                {alumnas.map(a => {
-                  const yaAnotada = reservas.some(r => r.fecha === modalReserva.fecha && r.hora === modalReserva.hora && r.alumnaId === a.id && r.estado !== 'cancelada')
-                  return (
-                    <option key={a.id} value={a.id} disabled={yaAnotada}>
-                      {a.nombre} {a.apellido}{yaAnotada ? ' (ya anotada)' : ''}
-                    </option>
-                  )
-                })}
-              </select>
+            {/* Selector de modo */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+              <button
+                className={`btn ${!modoExterno ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ flex: 1, padding: '10px', minHeight: 44, fontSize: '0.9rem' }}
+                onClick={() => { setModoExterno(false); setNombreExterno(''); setTelefonoExterno('') }}>
+                👤 Alumna registrada
+              </button>
+              <button
+                className={`btn ${modoExterno ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ flex: 1, padding: '10px', minHeight: 44, fontSize: '0.9rem' }}
+                onClick={() => { setModoExterno(true); setAlumnaSelec('') }}>
+                ✏️ Sin cuenta en la app
+              </button>
             </div>
+
+            {!modoExterno ? (
+              <div className="input-group">
+                <label>Alumna registrada</label>
+                <select value={alumnaSelec} onChange={e => setAlumnaSelec(e.target.value)} required>
+                  <option value="">— Seleccioná una alumna —</option>
+                  {alumnas.map(a => {
+                    const yaAnotada = reservas.some(r => r.fecha === modalReserva.fecha && r.hora === modalReserva.hora && r.alumnaId === a.id && r.estado !== 'cancelada')
+                    return (
+                      <option key={a.id} value={a.id} disabled={yaAnotada}>
+                        {a.nombre} {a.apellido}{yaAnotada ? ' (ya anotada)' : ''}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+            ) : (
+              <>
+                <div className="input-group">
+                  <label>Nombre completo</label>
+                  <input type="text" value={nombreExterno}
+                    onChange={e => setNombreExterno(e.target.value)}
+                    placeholder="Ej: María García" required />
+                </div>
+                <div className="input-group">
+                  <label>Teléfono (opcional)</label>
+                  <input type="tel" value={telefonoExterno}
+                    onChange={e => setTelefonoExterno(e.target.value)}
+                    placeholder="2664123456" />
+                </div>
+              </>
+            )}
 
             <div className="input-group">
               <label>Tipo de reserva</label>
@@ -451,16 +509,16 @@ export default function GestionTurnos() {
 
             {tipoReserva === 'fija' && (
               <div className="alert alert-info" style={{ fontSize: '0.88rem' }}>
-                📌 Al confirmar, este horario se guardará como turno fijo en el perfil de la alumna.
+                📌 {modoExterno ? 'El turno fijo quedará anotado en el historial.' : 'Este horario se guardará en el perfil de la alumna.'}
               </div>
             )}
 
             <div className="modal-actions">
               <button className="btn btn-primary" onClick={reservarPorAlumna}
-                disabled={guardando || !alumnaSelec} style={{ flex: 1 }}>
+                disabled={guardando || (modoExterno ? !nombreExterno.trim() : !alumnaSelec)} style={{ flex: 1 }}>
                 {guardando ? 'Guardando...' : 'Confirmar reserva'}
               </button>
-              <button className="btn btn-ghost" onClick={() => { setModalReserva(null); setAlumnaSelec(''); setTipoReserva('unica') }}
+              <button className="btn btn-ghost" onClick={() => { setModalReserva(null); setAlumnaSelec(''); setTipoReserva('unica'); setModoExterno(false); setNombreExterno(''); setTelefonoExterno('') }}
                 style={{ flex: 1 }}>
                 Cancelar
               </button>
