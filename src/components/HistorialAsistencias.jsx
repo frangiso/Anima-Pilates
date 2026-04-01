@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore'
+import { collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '../firebase'
 
 export default function HistorialAsistencias() {
@@ -15,8 +15,14 @@ export default function HistorialAsistencias() {
 
   async function cargar() {
     setCargando(true)
+    // Solo últimos 60 días para limitar lecturas
+    const desde = new Date()
+    desde.setDate(desde.getDate() - 60)
+    const desdeISO = desde.toISOString().split('T')[0]
+
     const snap = await getDocs(query(
       collection(db, 'reservas'),
+      where('fecha', '>=', desdeISO),
       where('estado', 'in', ['confirmada', 'cancelada'])
     ))
     const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -28,7 +34,7 @@ export default function HistorialAsistencias() {
   const hoy = new Date().toISOString().split('T')[0]
 
   const filtradas = reservas.filter(r => {
-    if (r.fecha > hoy) return false // solo pasadas
+    if (r.fecha > hoy) return false
     if (filtroAlumna && !r.alumnaNombre?.toLowerCase().includes(filtroAlumna.toLowerCase())) return false
     if (filtroFechaDesde && r.fecha < filtroFechaDesde) return false
     if (filtroFechaHasta && r.fecha > filtroFechaHasta) return false
@@ -40,14 +46,12 @@ export default function HistorialAsistencias() {
   const faltaron = filtradas.filter(r => r.asistio === false)
   const sinMarcar = filtradas.filter(r => r.asistio === undefined && r.estado === 'confirmada')
 
-  // Agrupar por fecha
   const porFecha = {}
   filtradas.forEach(r => {
     if (!porFecha[r.fecha]) porFecha[r.fecha] = []
     porFecha[r.fecha].push(r)
   })
 
-  // Agrupar por alumna
   const porAlumna = {}
   filtradas.forEach(r => {
     const k = r.alumnaNombre || 'Sin nombre'
@@ -62,7 +66,10 @@ export default function HistorialAsistencias() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <h3 style={{ color: '#2d5a3a' }}>Historial de asistencias</h3>
+        <div>
+          <h3 style={{ color: '#2d5a3a' }}>Historial de asistencias</h3>
+          <p style={{ color: '#5a6b60', fontSize: '0.82rem', marginTop: 4 }}>Últimos 60 días</p>
+        </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ background: '#d4edda', borderRadius: 10, padding: '8px 14px', textAlign: 'center' }}>
             <div style={{ fontSize: '1.4rem', fontFamily: 'Cormorant Garamond, serif', color: '#1a6630', fontWeight: 600 }}>{asistieron.length}</div>
@@ -81,17 +88,12 @@ export default function HistorialAsistencias() {
         </div>
       </div>
 
-      {/* Filtros */}
       <div className="card" style={{ marginBottom: 20, padding: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
           <div>
             <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#5a6b60', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 4 }}>Alumna</label>
-            <input
-              style={{ width: '100%', padding: '8px 12px', border: '2px solid #c8ddd0', borderRadius: 8, fontSize: '0.9rem', fontFamily: 'Lato, sans-serif' }}
-              placeholder="Buscar..."
-              value={filtroAlumna}
-              onChange={e => setFiltroAlumna(e.target.value)}
-            />
+            <input style={{ width: '100%', padding: '8px 12px', border: '2px solid #c8ddd0', borderRadius: 8, fontSize: '0.9rem', fontFamily: 'Lato, sans-serif' }}
+              placeholder="Buscar..." value={filtroAlumna} onChange={e => setFiltroAlumna(e.target.value)} />
           </div>
           <div>
             <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#5a6b60', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 4 }}>Desde</label>
@@ -120,16 +122,13 @@ export default function HistorialAsistencias() {
         )}
       </div>
 
-      {/* Vista agrupada */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <button className={`btn ${vistaAgrupada === 'fecha' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.88rem' }}
-          onClick={() => setVistaAgrupada('fecha')}>
+          style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.88rem' }} onClick={() => setVistaAgrupada('fecha')}>
           Por fecha
         </button>
         <button className={`btn ${vistaAgrupada === 'alumna' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.88rem' }}
-          onClick={() => setVistaAgrupada('alumna')}>
+          style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.88rem' }} onClick={() => setVistaAgrupada('alumna')}>
           Por alumna
         </button>
       </div>
@@ -141,7 +140,6 @@ export default function HistorialAsistencias() {
         </div>
       )}
 
-      {/* Vista por fecha */}
       {vistaAgrupada === 'fecha' && Object.keys(porFecha).sort((a,b) => b.localeCompare(a)).map(fecha => (
         <div key={fecha} className="card" style={{ marginBottom: 12, padding: 0, overflow: 'hidden' }}>
           <div style={{ background: '#f0f7f2', padding: '10px 18px', borderBottom: '1px solid #c8ddd0' }}>
@@ -149,7 +147,7 @@ export default function HistorialAsistencias() {
               {new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </span>
             <span style={{ marginLeft: 12, fontSize: '0.82rem', color: '#5a6b60' }}>
-              {porFecha[fecha].filter(r => r.asistio).length}/{porFecha[fecha].length} asistencias
+              {porFecha[fecha].filter(r => r.asistio === true).length}/{porFecha[fecha].filter(r => r.estado !== 'cancelada').length} asistencias
             </span>
           </div>
           <div style={{ padding: '8px 0' }}>
@@ -160,7 +158,11 @@ export default function HistorialAsistencias() {
                   <span style={{ color: '#5a6b60', fontSize: '0.85rem', marginLeft: 10 }}>🕐 {r.hora} hs</span>
                   {r.tipo === 'fija' && <span className="badge badge-gris" style={{ marginLeft: 8, fontSize: '0.72rem' }}>Fija</span>}
                 </div>
-                <span className={`badge ${r.estado === 'cancelada' ? 'badge-gris' : r.asistio === true ? 'badge-verde' : r.asistio === false ? 'badge-rojo' : 'badge-amarillo'}`}>
+                <span className={`badge ${
+                  r.estado === 'cancelada' ? 'badge-gris' :
+                  r.asistio === true ? 'badge-verde' :
+                  r.asistio === false ? 'badge-rojo' : 'badge-amarillo'
+                }`}>
                   {r.estado === 'cancelada' ? 'Canceló' : r.asistio === true ? '✓ Asistió' : r.asistio === false ? '✗ Faltó' : '⏳ Sin marcar'}
                 </span>
               </div>
@@ -169,7 +171,6 @@ export default function HistorialAsistencias() {
         </div>
       ))}
 
-      {/* Vista por alumna */}
       {vistaAgrupada === 'alumna' && Object.keys(porAlumna).sort().map(nombre => {
         const clases = porAlumna[nombre]
         const asist = clases.filter(r => r.asistio === true).length
@@ -179,26 +180,25 @@ export default function HistorialAsistencias() {
             <div style={{ background: '#f0f7f2', padding: '10px 18px', borderBottom: '1px solid #c8ddd0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontWeight: 700, fontSize: '1rem', color: '#2d5a3a' }}>{nombre}</span>
               <span style={{ fontSize: '0.85rem', color: '#5a6b60' }}>
-                {asist}/{total} clases asistidas
+                {asist}/{total} asistencias
                 {total > 0 && <span style={{ marginLeft: 8, color: '#4a7c59', fontWeight: 700 }}>{Math.round(asist/total*100)}%</span>}
               </span>
             </div>
             <div style={{ padding: '8px 0' }}>
-              {clases.sort((a,b) => b.fecha.localeCompare(a.fecha)).slice(0, 10).map(r => (
+              {clases.sort((a,b) => b.fecha.localeCompare(a.fecha)).map(r => (
                 <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 18px', borderBottom: '1px solid #f0f7f2' }}>
                   <span style={{ fontSize: '0.9rem', color: '#5a6b60', textTransform: 'capitalize' }}>
                     {new Date(r.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })} · {r.hora} hs
                   </span>
-                  <span className={`badge ${r.estado === 'cancelada' ? 'badge-gris' : r.asistio === true ? 'badge-verde' : r.asistio === false ? 'badge-rojo' : 'badge-amarillo'}`}>
+                  <span className={`badge ${
+                    r.estado === 'cancelada' ? 'badge-gris' :
+                    r.asistio === true ? 'badge-verde' :
+                    r.asistio === false ? 'badge-rojo' : 'badge-amarillo'
+                  }`}>
                     {r.estado === 'cancelada' ? 'Canceló' : r.asistio === true ? '✓ Asistió' : r.asistio === false ? '✗ Faltó' : '⏳ Sin marcar'}
                   </span>
                 </div>
               ))}
-              {clases.length > 10 && (
-                <div style={{ padding: '8px 18px', fontSize: '0.82rem', color: '#5a6b60' }}>
-                  + {clases.length - 10} registros más. Usá los filtros para ver más.
-                </div>
-              )}
             </div>
           </div>
         )
