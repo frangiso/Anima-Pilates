@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, getDocs, doc, updateDoc, deleteDoc, query, Timestamp } from 'firebase/firestore'
+import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 
 const PLANES = ['Plan mensual — 2 veces/semana', 'Plan mensual — 3 veces/semana', 'Plan mensual — libre', 'Pack 8 clases', 'Pack 12 clases', 'Clase suelta']
@@ -19,7 +19,7 @@ export default function GestionAlumnas() {
 
   async function cargar() {
     setCargando(true)
-    const snap = await getDocs(collection(db, 'usuarios'))
+    const snap = await getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
     const lista = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(u => u.rol === 'alumna')

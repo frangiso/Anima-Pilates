@@ -47,7 +47,7 @@ export default function GestionTurnos() {
   useEffect(() => { cargar() }, [semana])
 
   async function cargarAlumnas() {
-    const snap = await getDocs(collection(db, 'usuarios'))
+    const snap = await getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
     const lista = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(u => u.rol === 'alumna' && u.estado !== 'inactiva')
