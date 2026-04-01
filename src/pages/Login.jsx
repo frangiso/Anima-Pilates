@@ -6,6 +6,7 @@ import { auth, db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
+  const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [error, setError] = useState('')
@@ -29,20 +30,42 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      // Login directo con email — 1 sola lectura, sin buscar en colección
-      const cred = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), pass)
-      const snap = await getDoc(doc(db, 'usuarios', cred.user.uid))
-      if (!snap.exists()) {
-        setError('Usuario no encontrado. Contactá a la profesora.')
+      if (esProfe) {
+        await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), pass)
+        navigate('/profe', { replace: true })
+        return
+      }
+
+      // Alumna: busca en colección telefonos — 1 sola lectura
+      const telLimpio = telefono.trim().replace(/\s/g, '')
+      let telSnap = await getDoc(doc(db, 'telefonos', telLimpio))
+
+      // Si no encontró, probar con/sin 0 adelante
+      if (!telSnap.exists()) {
+        const telAlt = telLimpio.startsWith('0') ? telLimpio.slice(1) : '0' + telLimpio
+        telSnap = await getDoc(doc(db, 'telefonos', telAlt))
+      }
+
+      if (!telSnap.exists()) {
+        setError('No encontramos ese número. Revisá que sea el mismo que usaste al registrarte.')
         setLoading(false)
         return
       }
-      const p = snap.data()
-      if (p.rol === 'profe') navigate('/profe', { replace: true })
-      else navigate('/alumna', { replace: true })
+
+      const { uid } = telSnap.data()
+      const alumnaSnap = await getDoc(doc(db, 'usuarios', uid))
+      if (!alumnaSnap.exists()) {
+        setError('Error al encontrar tu cuenta. Contactá a la profesora.')
+        setLoading(false)
+        return
+      }
+
+      await signInWithEmailAndPassword(auth, alumnaSnap.data().email, pass)
+      navigate('/alumna', { replace: true })
+
     } catch (err) {
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
-        setError('Email o contraseña incorrectos.')
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        setError('Contraseña incorrecta.')
       } else if (err.code === 'auth/too-many-requests') {
         setError('Demasiados intentos. Esperá unos minutos.')
       } else {
@@ -58,7 +81,7 @@ export default function Login() {
     setError('')
     try {
       await sendPasswordResetEmail(auth, email.trim())
-      setResetMsg('Te enviamos un email. Revisá tu correo.')
+      setResetMsg('Te enviamos un email para restablecer tu contraseña.')
     } catch {
       setError('No encontramos ese correo.')
     }
@@ -84,47 +107,59 @@ export default function Login() {
           {!modoReset ? (
             <form onSubmit={handleLogin} autoComplete="off">
               {error && <div className="alert alert-error">{error}</div>}
-              <div className="input-group">
-                <label>Correo electrónico</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="tucorreo@email.com"
-                  required
-                  autoComplete="email"
-                  style={{ fontSize: '1.05rem' }}
-                />
-              </div>
+
+              {esProfe ? (
+                <div className="input-group">
+                  <label>Correo electrónico</label>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="tucorreo@email.com" required autoComplete="email" />
+                </div>
+              ) : (
+                <div className="input-group">
+                  <label>Tu número de teléfono</label>
+                  <input
+                    type="tel"
+                    value={telefono}
+                    onChange={e => setTelefono(e.target.value)}
+                    placeholder="Ej: 2664123456"
+                    required
+                    autoComplete="off"
+                    inputMode="numeric"
+                    style={{ fontSize: '1.3rem', letterSpacing: '0.08em' }}
+                  />
+                  <span style={{ fontSize: '0.82rem', color: '#5a6b60', marginTop: 4 }}>
+                    El mismo número que usaste al registrarte
+                  </span>
+                </div>
+              )}
+
               <div className="input-group">
                 <label>Contraseña</label>
-                <input
-                  type="password"
-                  value={pass}
-                  onChange={e => setPass(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  autoComplete="current-password"
-                  style={{ fontSize: '1.1rem' }}
-                />
+                <input type="password" value={pass} onChange={e => setPass(e.target.value)}
+                  placeholder="••••••••" required autoComplete="current-password"
+                  style={{ fontSize: '1.2rem' }} />
               </div>
+
               <button className="btn btn-primary" type="submit" disabled={loading}
                 style={{ width: '100%', marginTop: 8, fontSize: '1.1rem' }}>
                 {loading ? 'Ingresando...' : 'Ingresar'}
               </button>
-              <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.88rem' }}>
-                <button type="button" onClick={() => setModoReset(true)}
-                  style={{ background: 'none', border: 'none', color: '#5a6b60', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.88rem' }}>
-                  Olvidé mi contraseña
-                </button>
-              </p>
+
+              {!esProfe && (
+                <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.88rem' }}>
+                  <button type="button" onClick={() => setModoReset(true)}
+                    style={{ background: 'none', border: 'none', color: '#5a6b60', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.88rem' }}>
+                    Olvidé mi contraseña
+                  </button>
+                </p>
+              )}
             </form>
           ) : (
             <form onSubmit={handleReset}>
               {error && <div className="alert alert-error">{error}</div>}
               {resetMsg && <div className="alert alert-exito">{resetMsg}</div>}
               <p style={{ color: '#5a6b60', marginBottom: 18, fontSize: '0.95rem' }}>
-                Ingresá tu correo y te mandamos un link para cambiar la contraseña.
+                Ingresá el correo con el que te registraste y te mandamos un link para cambiar la contraseña.
               </p>
               <div className="input-group">
                 <label>Correo electrónico</label>
@@ -142,11 +177,15 @@ export default function Login() {
               </p>
             </form>
           )}
-          <p style={{ textAlign: 'center', marginTop: 20, color: '#5a6b60', fontSize: '0.95rem' }}>
-            ¿Es tu primera vez?{' '}
-            <Link to="/registro" style={{ color: '#4a7c59', fontWeight: 700 }}>Registrate acá</Link>
-          </p>
+
+          {!modoReset && !esProfe && (
+            <p style={{ textAlign: 'center', marginTop: 20, color: '#5a6b60', fontSize: '0.95rem' }}>
+              ¿Es tu primera vez?{' '}
+              <Link to="/registro" style={{ color: '#4a7c59', fontWeight: 700 }}>Registrate acá</Link>
+            </p>
+          )}
         </div>
+
         <p style={{ textAlign: 'center', marginTop: 20 }}>
           <Link to="/" style={{ color: '#5a6b60', fontSize: '0.9rem' }}>← Volver al inicio</Link>
         </p>
