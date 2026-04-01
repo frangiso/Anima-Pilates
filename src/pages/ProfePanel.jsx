@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { signOut } from 'firebase/auth'
 import { useNavigate } from 'react-router-dom'
-import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, getDocs } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import PanelDashboard from '../components/PanelDashboard'
@@ -18,10 +18,16 @@ export default function ProfePanel() {
   const [notifNoLeidas, setNotifNoLeidas] = useState(0)
 
   useEffect(() => {
-    const q = query(collection(db, 'notificaciones'), where('leida', '==', false))
-    const unsub = onSnapshot(q, snap => setNotifNoLeidas(snap.size))
-    return unsub
+    // Lectura simple en vez de onSnapshot — evita lecturas continuas
+    cargarNotif()
   }, [])
+
+  async function cargarNotif() {
+    try {
+      const snap = await getDocs(query(collection(db, 'notificaciones'), where('leida', '==', false)))
+      setNotifNoLeidas(snap.size)
+    } catch { }
+  }
 
   async function logout() {
     await signOut(auth)
@@ -33,9 +39,7 @@ export default function ProfePanel() {
       <nav className="navbar">
         <span className="navbar-brand">ANIMA PILATES — Profesional</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ color: '#5a6b60', fontSize: '0.9rem' }}>
-            {perfil?.nombre}
-          </span>
+          <span style={{ color: '#5a6b60', fontSize: '0.9rem' }}>{perfil?.nombre}</span>
           <button className="btn btn-ghost" onClick={logout} style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.88rem' }}>
             Salir
           </button>
@@ -59,7 +63,8 @@ export default function ProfePanel() {
           <button className={`tab ${tab === 'historial' ? 'active' : ''}`} onClick={() => setTab('historial')}>
             📋 Historial
           </button>
-          <button className={`tab ${tab === 'notif' ? 'active' : ''}`} onClick={() => setTab('notif')}>
+          <button className={`tab ${tab === 'notif' ? 'active' : ''}`}
+            onClick={() => { setTab('notif'); setNotifNoLeidas(0) }}>
             🔔 Avisos
             {notifNoLeidas > 0 && <span className="notif-dot" />}
           </button>
