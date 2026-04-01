@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, updateDoc, getDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 
 const HORAS = Array.from({ length: 13 }, (_, i) => `${(8+i).toString().padStart(2,'0')}:00`)
@@ -68,6 +68,12 @@ export default function PanelDashboard() {
     }
 
     setReservasHoy(prev => prev.map(r => r.id === id ? { ...r, asistio, estado: 'confirmada' } : r))
+  }
+
+  async function quitarDeTurno(reservaId, alumnaNombre) {
+    if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
+    await deleteDoc(doc(db, 'reservas', reservaId))
+    setReservasHoy(prev => prev.filter(r => r.id !== reservaId))
   }
 
   if (cargando) return <div className="spinner" />
@@ -163,6 +169,11 @@ export default function PanelDashboard() {
                               onClick={e => { e.stopPropagation(); marcarAsistencia(a.id, a.alumnaId, false, undefined) }}>
                               ✗ Faltó
                             </button>
+                            <button className="btn btn-danger"
+                              style={{ padding: '6px 10px', minHeight: 34, fontSize: '0.82rem' }}
+                              onClick={e => { e.stopPropagation(); quitarDeTurno(a.id, a.alumnaNombre) }}>
+                              Quitar
+                            </button>
                           </>
                         ) : (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -173,6 +184,11 @@ export default function PanelDashboard() {
                               style={{ padding: '4px 10px', minHeight: 28, fontSize: '0.78rem' }}
                               onClick={e => { e.stopPropagation(); marcarAsistencia(a.id, a.alumnaId, !a.asistio, a.asistio) }}>
                               Corregir
+                            </button>
+                            <button className="btn btn-danger"
+                              style={{ padding: '4px 10px', minHeight: 28, fontSize: '0.78rem' }}
+                              onClick={e => { e.stopPropagation(); quitarDeTurno(a.id, a.alumnaNombre) }}>
+                              Quitar
                             </button>
                           </div>
                         )}
