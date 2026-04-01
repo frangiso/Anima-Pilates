@@ -36,15 +36,16 @@ export default function Login() {
         return
       }
 
-      // Alumna: busca en colección telefonos — 1 sola lectura
+      // Limpiar número — sacar espacios, guiones, paréntesis
       const telLimpio = telefono.trim().replace(/[\s\-\(\)\.]/g, '')
-      let telSnap = await getDoc(doc(db, 'telefonos', telLimpio))
+      // Generar variantes: con 0, sin 0
+      const sinCero = telLimpio.startsWith('0') ? telLimpio.slice(1) : telLimpio
+      const conCero = '0' + sinCero
 
-      // Si no encontró, probar con/sin 0 adelante
-      if (!telSnap.exists()) {
-        const telAlt = telLimpio.startsWith('0') ? telLimpio.slice(1) : '0' + telLimpio
-        telSnap = await getDoc(doc(db, 'telefonos', telAlt))
-      }
+      // Probar las 3 variantes
+      let telSnap = await getDoc(doc(db, 'telefonos', telLimpio))
+      if (!telSnap.exists()) telSnap = await getDoc(doc(db, 'telefonos', sinCero))
+      if (!telSnap.exists()) telSnap = await getDoc(doc(db, 'telefonos', conCero))
 
       if (!telSnap.exists()) {
         setError('No encontramos ese número. Revisá que sea el mismo que usaste al registrarte.')
