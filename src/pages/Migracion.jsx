@@ -30,7 +30,7 @@ export default function Migracion() {
       const nuevosLogs = []
 
       for (const a of alumnas) {
-        const tel = (a.telefono || '').trim().replace(/\s/g, '')
+        const tel = (a.telefono || '').trim().replace(/[\s\-\(\)\.]/g, '')
         const nombre = `${a.nombre} ${a.apellido}`
 
         if (!tel) {

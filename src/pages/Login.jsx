@@ -37,7 +37,7 @@ export default function Login() {
       }
 
       // Alumna: busca en colección telefonos — 1 sola lectura
-      const telLimpio = telefono.trim().replace(/\s/g, '')
+      const telLimpio = telefono.trim().replace(/[\s\-\(\)\.]/g, '')
       let telSnap = await getDoc(doc(db, 'telefonos', telLimpio))
 
       // Si no encontró, probar con/sin 0 adelante
