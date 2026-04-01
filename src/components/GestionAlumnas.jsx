@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 
@@ -6,8 +6,9 @@ const PLANES = ['Plan mensual — 2 veces/semana', 'Plan mensual — 3 veces/sem
 
 export default function GestionAlumnas() {
   const [alumnas, setAlumnas] = useState([])
-  const [cargando, setCargando] = useState(true)
   const [busqueda, setBusqueda] = useState('')
+  const [cargando, setCargando] = useState(false)
+  const [buscado, setBuscado] = useState(false)
   const [editando, setEditando] = useState(null)
   const [eliminando, setEliminando] = useState(null)
   const [form, setForm] = useState({})
@@ -15,16 +16,27 @@ export default function GestionAlumnas() {
   const [msg, setMsg] = useState(null)
   const [filtro, setFiltro] = useState('todas')
 
-  useEffect(() => { cargar() }, [])
-
-  async function cargar() {
+  async function buscar() {
+    if (!busqueda.trim() && filtro === 'todas') return
     setCargando(true)
+    setBuscado(true)
+
     const snap = await getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
-    const lista = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(u => u.rol === 'alumna')
-    lista.sort((a, b) => (a.apellido || '').localeCompare(b.apellido || ''))
-    setAlumnas(lista)
+    const todas = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+
+    const resultado = todas.filter(a => {
+      const texto = `${a.nombre} ${a.apellido} ${a.telefono} ${a.email}`.toLowerCase()
+      const coincideTexto = !busqueda.trim() || texto.includes(busqueda.toLowerCase())
+      const coincideFiltro =
+        filtro === 'todas' ? true :
+        filtro === 'deuda' ? a.deuda :
+        filtro === 'inactiva' ? a.estado === 'inactiva' :
+        filtro === 'sin-plan' ? !a.plan : true
+      return coincideTexto && coincideFiltro
+    })
+
+    resultado.sort((a, b) => (a.apellido || '').localeCompare(b.apellido || ''))
+    setAlumnas(resultado)
     setCargando(false)
   }
 
@@ -59,7 +71,7 @@ export default function GestionAlumnas() {
     await updateDoc(doc(db, 'usuarios', editando), datos)
     setMsg({ tipo: 'exito', texto: 'Alumna actualizada correctamente.' })
     setEditando(null)
-    await cargar()
+    await buscar()
     setGuardando(false)
   }
 
@@ -69,27 +81,13 @@ export default function GestionAlumnas() {
     await deleteDoc(doc(db, 'usuarios', eliminando.id))
     setMsg({ tipo: 'exito', texto: `${eliminando.nombre} ${eliminando.apellido} fue eliminada.` })
     setEliminando(null)
-    await cargar()
+    await buscar()
     setGuardando(false)
   }
 
-  const filtradas = alumnas
-    .filter(a => {
-      const texto = `${a.nombre} ${a.apellido} ${a.email}`.toLowerCase()
-      return texto.includes(busqueda.toLowerCase())
-    })
-    .filter(a => {
-      if (filtro === 'deuda') return a.deuda
-      if (filtro === 'inactiva') return a.estado === 'inactiva'
-      if (filtro === 'sin-plan') return !a.plan
-      return true
-    })
-
-  if (cargando) return <div className="spinner" />
-
   return (
     <div>
-      <h3 style={{ color: '#2d5a3a', marginBottom: 20 }}>Gestión de alumnas ({alumnas.length})</h3>
+      <h3 style={{ color: '#2d5a3a', marginBottom: 20 }}>Gestión de alumnas</h3>
 
       {msg && (
         <div className={`alert alert-${msg.tipo}`} style={{ marginBottom: 16 }}>
@@ -98,15 +96,17 @@ export default function GestionAlumnas() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      {/* Buscador */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <input
-          style={{ flex: 1, minWidth: 200, padding: '10px 14px', border: '2px solid #c8ddd0', borderRadius: 8, fontSize: '0.95rem', fontFamily: 'Lato, sans-serif' }}
-          placeholder="🔍 Buscar alumna..."
+          style={{ flex: 1, minWidth: 200, padding: '12px 16px', border: '2px solid #c8ddd0', borderRadius: 10, fontSize: '1rem', fontFamily: 'Lato, sans-serif' }}
+          placeholder="🔍 Nombre, apellido o teléfono..."
           value={busqueda}
           onChange={e => setBusqueda(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && buscar()}
         />
         <select
-          style={{ padding: '10px 14px', border: '2px solid #c8ddd0', borderRadius: 8, fontSize: '0.92rem', fontFamily: 'Lato, sans-serif', background: 'white' }}
+          style={{ padding: '12px 14px', border: '2px solid #c8ddd0', borderRadius: 10, fontSize: '0.92rem', fontFamily: 'Lato, sans-serif', background: 'white' }}
           value={filtro}
           onChange={e => setFiltro(e.target.value)}
         >
@@ -115,66 +115,89 @@ export default function GestionAlumnas() {
           <option value="inactiva">Inactivas</option>
           <option value="sin-plan">Sin plan</option>
         </select>
+        <button className="btn btn-primary" onClick={buscar} disabled={cargando}
+          style={{ padding: '12px 20px', minHeight: 48, fontSize: '1rem' }}>
+          {cargando ? '...' : 'Buscar'}
+        </button>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="tabla">
-            <thead>
-              <tr>
-                <th>Alumna</th>
-                <th>Plan</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtradas.length === 0 && (
-                <tr><td colSpan={4} style={{ textAlign: 'center', padding: 30, color: '#5a6b60' }}>No hay alumnas con ese criterio.</td></tr>
-              )}
-              {filtradas.map(a => (
-                <tr key={a.id}>
-                  <td>
-                    <div style={{ fontWeight: 700 }}>{a.nombre} {a.apellido}</div>
-                    <div style={{ fontSize: '0.82rem', color: '#5a6b60' }}>{a.telefono}</div>
-                    <div style={{ fontSize: '0.78rem', color: '#5a6b60' }}>{a.email}</div>
-                  </td>
-                  <td>
-                    <div style={{ fontSize: '0.88rem' }}>{a.plan || <span style={{ color: '#aaa' }}>Sin plan</span>}</div>
-                    {a.clasesRestantes > 0 && (
-                      <div style={{ fontSize: '0.78rem', color: '#4a7c59' }}>{a.clasesRestantes} clases restantes</div>
-                    )}
-                    {a.turnoFijo && (
-                      <div style={{ fontSize: '0.78rem', color: '#5a6b60' }}>📌 {a.turnoFijo}</div>
-                    )}
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span className={`badge ${a.estado === 'inactiva' ? 'badge-rojo' : 'badge-verde'}`} style={{ width: 'fit-content' }}>
-                        {a.estado === 'inactiva' ? 'Inactiva' : 'Activa'}
-                      </span>
-                      {a.deuda && <span className="badge badge-rojo" style={{ width: 'fit-content' }}>Con deuda</span>}
-                      {!a.plan && <span className="badge badge-amarillo" style={{ width: 'fit-content' }}>Sin plan</span>}
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button className="btn btn-secondary" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.88rem' }}
-                        onClick={() => abrirEdicion(a)}>
-                        Editar
-                      </button>
-                      <button className="btn btn-danger" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
-                        onClick={() => setEliminando(a)}>
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Estado inicial */}
+      {!buscado && (
+        <div className="card" style={{ textAlign: 'center', padding: 40 }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🔍</div>
+          <p style={{ color: '#5a6b60' }}>Escribí el nombre, apellido o teléfono de una alumna y presioná Buscar.</p>
+          <p style={{ color: '#5a6b60', fontSize: '0.88rem', marginTop: 8 }}>También podés usar los filtros para buscar por deuda, inactivas o sin plan.</p>
         </div>
-      </div>
+      )}
+
+      {/* Sin resultados */}
+      {buscado && !cargando && alumnas.length === 0 && (
+        <div className="card" style={{ textAlign: 'center', padding: 40 }}>
+          <p style={{ color: '#5a6b60' }}>No encontramos alumnas con ese criterio.</p>
+        </div>
+      )}
+
+      {/* Resultados */}
+      {alumnas.length > 0 && (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '10px 16px', background: '#f0f7f2', borderBottom: '1px solid #c8ddd0', fontSize: '0.85rem', color: '#5a6b60' }}>
+            {alumnas.length} resultado{alumnas.length !== 1 ? 's' : ''}
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tabla">
+              <thead>
+                <tr>
+                  <th>Alumna</th>
+                  <th>Plan</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alumnas.map(a => (
+                  <tr key={a.id}>
+                    <td>
+                      <div style={{ fontWeight: 700 }}>{a.nombre} {a.apellido}</div>
+                      <div style={{ fontSize: '0.82rem', color: '#5a6b60' }}>{a.telefono}</div>
+                      <div style={{ fontSize: '0.78rem', color: '#5a6b60' }}>{a.email}</div>
+                    </td>
+                    <td>
+                      <div style={{ fontSize: '0.88rem' }}>{a.plan || <span style={{ color: '#aaa' }}>Sin plan</span>}</div>
+                      {a.clasesRestantes > 0 && (
+                        <div style={{ fontSize: '0.78rem', color: '#4a7c59' }}>{a.clasesRestantes} clases restantes</div>
+                      )}
+                      {a.turnoFijo && (
+                        <div style={{ fontSize: '0.78rem', color: '#5a6b60' }}>📌 {a.turnoFijo}</div>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span className={`badge ${a.estado === 'inactiva' ? 'badge-rojo' : 'badge-verde'}`} style={{ width: 'fit-content' }}>
+                          {a.estado === 'inactiva' ? 'Inactiva' : 'Activa'}
+                        </span>
+                        {a.deuda && <span className="badge badge-rojo" style={{ width: 'fit-content' }}>Con deuda</span>}
+                        {!a.plan && <span className="badge badge-amarillo" style={{ width: 'fit-content' }}>Sin plan</span>}
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button className="btn btn-secondary" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.88rem' }}
+                          onClick={() => abrirEdicion(a)}>
+                          Editar
+                        </button>
+                        <button className="btn btn-danger" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
+                          onClick={() => setEliminando(a)}>
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Modal edición */}
       {editando && (
@@ -233,7 +256,7 @@ export default function GestionAlumnas() {
         </div>
       )}
 
-      {/* Modal confirmación eliminar */}
+      {/* Modal confirmar eliminar */}
       {eliminando && (
         <div className="modal-overlay" onClick={() => setEliminando(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -242,15 +265,13 @@ export default function GestionAlumnas() {
               ¿Estás segura que querés eliminar a <strong>{eliminando.nombre} {eliminando.apellido}</strong>?
             </p>
             <div className="alert alert-error" style={{ fontSize: '0.9rem' }}>
-              ⚠️ Esta acción no se puede deshacer. Se eliminará el perfil de la alumna pero sus reservas pasadas quedarán en el historial.
+              ⚠️ Esta acción no se puede deshacer.
             </div>
             <div className="modal-actions">
               <button className="btn btn-danger" onClick={confirmarEliminar} disabled={guardando} style={{ flex: 1 }}>
                 {guardando ? 'Eliminando...' : 'Sí, eliminar'}
               </button>
-              <button className="btn btn-ghost" onClick={() => setEliminando(null)} style={{ flex: 1 }}>
-                Cancelar
-              </button>
+              <button className="btn btn-ghost" onClick={() => setEliminando(null)} style={{ flex: 1 }}>Cancelar</button>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, orderBy, getDocs, doc, updateDoc, writeBatch } from 'firebase/firestore'
+import { collection, query, orderBy, limit, getDocs, doc, updateDoc, writeBatch } from 'firebase/firestore'
 import { db } from '../firebase'
 
 const ICONOS = {
@@ -30,7 +30,7 @@ export default function Notificaciones() {
 
   async function cargar() {
     setCargando(true)
-    const snap = await getDocs(query(collection(db, 'notificaciones'), orderBy('creadoEn', 'desc')))
+    const snap = await getDocs(query(collection(db, 'notificaciones'), orderBy('creadoEn', 'desc'), limit(30)))
     setNotifs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     setCargando(false)
   }
