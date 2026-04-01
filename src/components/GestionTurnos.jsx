@@ -42,9 +42,20 @@ export default function GestionTurnos() {
   const [nombreExterno, setNombreExterno] = useState('')
   const [telefonoExterno, setTelefonoExterno] = useState('')
 
+  // Modal detalle turno (ver y quitar alumnas)
+  const [modalDetalle, setModalDetalle] = useState(null) // { fecha, hora, reservas }
+
   // Feriados
   const [nuevaFecha, setNuevaFecha] = useState('')
   const [nuevaDesc, setNuevaDesc] = useState('')
+
+  async function quitarDeTurnoGrilla(reservaId, alumnaNombre) {
+    if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
+    await deleteDoc(doc(db, 'reservas', reservaId))
+    await cargar()
+    setModalDetalle(null)
+    setMsg({ tipo: 'exito', texto: `${alumnaNombre} quitada del turno.` })
+  }
 
   useEffect(() => { cargarAlumnas() }, [])
   useEffect(() => { cargar() }, [semana])
@@ -338,10 +349,10 @@ export default function GestionTurnos() {
                     )
                     if (ocupados > 0) return (
                       <div key={`${di}_${hora}`} className="turno-cell turno-reservado"
-                        onClick={() => setModalReserva({ fecha, hora })} style={{ cursor: 'pointer' }}>
+                        onClick={() => setModalDetalle({ fecha, hora, resHora })} style={{ cursor: 'pointer' }}>
                         <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>{ocupados}/5</span>
                         {hayPendiente && <span style={{ fontSize: '0.68rem', background: '#fef3cd', color: '#856404', borderRadius: 4, padding: '1px 4px' }}>⏳</span>}
-                        <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>+alumna</span>
+                        <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>Ver / +</span>
                       </div>
                     )
                     return (
@@ -425,6 +436,42 @@ export default function GestionTurnos() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal detalle turno — ver y quitar alumnas */}
+      {modalDetalle && (
+        <div className="modal-overlay" onClick={() => setModalDetalle(null)}>
+          <div className="modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <h3>Turno: {new Date(modalDetalle.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })} · {modalDetalle.hora} hs</h3>
+            <p style={{ color: '#5a6b60', fontSize: '0.9rem', marginBottom: 16 }}>
+              {modalDetalle.resHora.length}/5 lugares ocupados
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+              {modalDetalle.resHora.map(r => (
+                <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#f8fdf9', borderRadius: 8, border: '1px solid #c8ddd0' }}>
+                  <div>
+                    <span style={{ fontWeight: 700 }}>{r.alumnaNombre}</span>
+                    {r.tipo === 'fija' && <span className="badge badge-gris" style={{ marginLeft: 8, fontSize: '0.72rem' }}>Fija</span>}
+                    {r.estado === 'pendiente' && <span className="badge badge-amarillo" style={{ marginLeft: 8, fontSize: '0.72rem' }}>Pendiente</span>}
+                  </div>
+                  <button className="btn btn-danger" style={{ padding: '6px 12px', minHeight: 32, fontSize: '0.82rem' }}
+                    onClick={() => quitarDeTurnoGrilla(r.id, r.alumnaNombre)}>
+                    Quitar
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary" style={{ flex: 1 }}
+                onClick={() => { setModalDetalle(null); setModalReserva({ fecha: modalDetalle.fecha, hora: modalDetalle.hora }) }}>
+                + Agregar alumna
+              </button>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setModalDetalle(null)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
