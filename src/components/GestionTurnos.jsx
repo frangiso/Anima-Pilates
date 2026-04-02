@@ -342,9 +342,11 @@ export default function GestionTurnos() {
                       </div>
                     )
                     if (lleno) return (
-                      <div key={`${di}_${hora}`} className="turno-cell turno-reservado" style={{ cursor: 'default' }}>
+                      <div key={`${di}_${hora}`} className="turno-cell turno-reservado"
+                        onClick={() => setModalDetalle({ fecha, hora, resHora })} style={{ cursor: 'pointer' }}>
                         <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>5/5</span>
                         {hayPendiente && <span style={{ fontSize: '0.68rem', background: '#fef3cd', color: '#856404', borderRadius: 4, padding: '1px 4px' }}>⏳</span>}
+                        <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>Ver / +</span>
                       </div>
                     )
                     if (ocupados > 0) return (
