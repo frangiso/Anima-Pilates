@@ -10,6 +10,7 @@ import GestionPagos from '../components/GestionPagos'
 import GestionTurnos from '../components/GestionTurnos'
 import Notificaciones from '../components/Notificaciones'
 import HistorialAsistencias from '../components/HistorialAsistencias'
+import Sincronizar from '../components/Sincronizar'
 
 export default function ProfePanel() {
   const { perfil } = useAuth()
@@ -18,7 +19,6 @@ export default function ProfePanel() {
   const [notifNoLeidas, setNotifNoLeidas] = useState(0)
 
   useEffect(() => {
-    // Lectura simple en vez de onSnapshot — evita lecturas continuas
     cargarNotif()
   }, [])
 
@@ -68,6 +68,9 @@ export default function ProfePanel() {
             🔔 Avisos
             {notifNoLeidas > 0 && <span className="notif-dot" />}
           </button>
+          <button className={`tab ${tab === 'sincronizar' ? 'active' : ''}`} onClick={() => setTab('sincronizar')}>
+            🔄 Sincronizar
+          </button>
         </div>
 
         {tab === 'dashboard' && <PanelDashboard />}
@@ -76,6 +79,7 @@ export default function ProfePanel() {
         {tab === 'pagos' && <GestionPagos />}
         {tab === 'historial' && <HistorialAsistencias />}
         {tab === 'notif' && <Notificaciones />}
+        {tab === 'sincronizar' && <Sincronizar />}
       </div>
     </div>
   )
