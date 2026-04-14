@@ -34,7 +34,8 @@ export default function ReservarTurno({ bloqueada }) {
   const [modal, setModal] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState(null)
-  const [tipoReserva, setTipoReserva] = useState('unica')
+  const [tipoReserva, setTipoReserva] = useState('recuperacion')
+  const [recuperacionesMes, setRecuperacionesMes] = useState(0)
 
   const horas = getHoras()
 
@@ -61,6 +62,19 @@ export default function ReservarTurno({ bloqueada }) {
     setReservas(mapa)
     setMisReservas(mias)
     setFeriados(snapFer.docs.map(d => d.data().fecha))
+
+    // Contar recuperaciones del mes actual
+    const hoy = new Date()
+    const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`
+    const snapRec = await getDocs(query(
+      collection(db, 'reservas'),
+      where('alumnaId', '==', user.uid),
+      where('tipo', '==', 'recuperacion'),
+      where('estado', 'in', ['confirmada', 'pendiente'])
+    ))
+    const recMes = snapRec.docs.filter(d => d.data().fecha?.startsWith(mesActual)).length
+    setRecuperacionesMes(recMes)
+
     setCargando(false)
   }
 
@@ -100,13 +114,13 @@ export default function ReservarTurno({ bloqueada }) {
       })
       await addDoc(collection(db, 'notificaciones'), {
         tipo: tipoReserva === 'fija' ? 'turno_fijo_solicitado' : 'nueva_reserva',
-        titulo: tipoReserva === 'fija' ? 'Solicitud de turno fijo' : 'Nueva reserva',
+        titulo: tipoReserva === 'fija' ? 'Solicitud de turno fijo' : tipoReserva === 'recuperacion' ? 'Clase de recuperación' : 'Nueva reserva',
         mensaje: `${perfil.nombre} ${perfil.apellido} reservó el ${modal.fecha} a las ${modal.hora}hs.`,
         leida: false,
         creadoEn: serverTimestamp(),
         datos: { alumnaId: user.uid, fecha: modal.fecha, hora: modal.hora }
       })
-      setMsg({ tipo: 'exito', texto: tipoReserva === 'fija' ? '¡Solicitud enviada! La profesora la confirmará pronto.' : '¡Turno reservado con éxito!' })
+      setMsg({ tipo: 'exito', texto: tipoReserva === 'fija' ? '¡Solicitud enviada! La profesora la confirmará pronto.' : '¡Clase de recuperación reservada con éxito!' })
       setModal(null)
       await cargarSemana()
     } catch {
@@ -232,17 +246,30 @@ export default function ReservarTurno({ bloqueada }) {
             <div className="input-group">
               <label>Tipo de reserva</label>
               <select value={tipoReserva} onChange={e => setTipoReserva(e.target.value)}>
-                <option value="unica">Clase suelta (una sola vez)</option>
+                <option value="recuperacion">Clase de recuperación (máx. 2 por mes)</option>
                 <option value="fija">Turno fijo semanal (necesita aprobación)</option>
               </select>
             </div>
+
+            {tipoReserva === 'recuperacion' && (
+              <div className={`alert ${recuperacionesMes >= 2 ? 'alert-error' : 'alert-info'}`} style={{ fontSize: '0.88rem' }}>
+                {recuperacionesMes >= 2
+                  ? `🚫 Ya usaste tus 2 clases de recuperación de este mes. Podés usar la siguiente a partir del mes que viene.`
+                  : `💡 Usaste ${recuperacionesMes} de 2 clases de recuperación disponibles este mes.`
+                }
+              </div>
+            )}
+
             {tipoReserva === 'fija' && (
               <div className="alert alert-info" style={{ fontSize: '0.88rem' }}>
                 💡 Los turnos fijos quedan pendientes hasta que la profesora los apruebe.
               </div>
             )}
+
             <div className="modal-actions">
-              <button className="btn btn-primary" onClick={confirmarReserva} disabled={guardando} style={{ flex: 1 }}>
+              <button className="btn btn-primary" onClick={confirmarReserva}
+                disabled={guardando || (tipoReserva === 'recuperacion' && recuperacionesMes >= 2)}
+                style={{ flex: 1 }}>
                 {guardando ? 'Guardando...' : 'Confirmar'}
               </button>
               <button className="btn btn-ghost" onClick={() => setModal(null)} style={{ flex: 1 }}>Cancelar</button>
