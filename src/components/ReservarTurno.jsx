@@ -35,7 +35,7 @@ export default function ReservarTurno({ bloqueada }) {
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState(null)
   const [tipoReserva, setTipoReserva] = useState('recuperacion')
-  const [recuperacionesMes, setRecuperacionesMes] = useState(0)
+  const [recuperacionesPorMes, setRecuperacionesPorMes] = useState({})
 
   const horas = getHoras()
 
@@ -63,17 +63,20 @@ export default function ReservarTurno({ bloqueada }) {
     setMisReservas(mias)
     setFeriados(snapFer.docs.map(d => d.data().fecha))
 
-    // Contar recuperaciones del mes actual
-    const hoy = new Date()
-    const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`
+    // Contar recuperaciones por mes (para limitar 2 por mes)
     const snapRec = await getDocs(query(
       collection(db, 'reservas'),
       where('alumnaId', '==', user.uid),
       where('tipo', '==', 'recuperacion'),
       where('estado', 'in', ['confirmada', 'pendiente'])
     ))
-    const recMes = snapRec.docs.filter(d => d.data().fecha?.startsWith(mesActual)).length
-    setRecuperacionesMes(recMes)
+    const conteoMeses = {}
+    snapRec.docs.forEach(d => {
+      const fecha = d.data().fecha || ''
+      const mes = fecha.substring(0, 7) // YYYY-MM
+      if (mes) conteoMeses[mes] = (conteoMeses[mes] || 0) + 1
+    })
+    setRecuperacionesPorMes(conteoMeses)
 
     setCargando(false)
   }
@@ -251,14 +254,19 @@ export default function ReservarTurno({ bloqueada }) {
               </select>
             </div>
 
-            {tipoReserva === 'recuperacion' && (
-              <div className={`alert ${recuperacionesMes >= 2 ? 'alert-error' : 'alert-info'}`} style={{ fontSize: '0.88rem' }}>
-                {recuperacionesMes >= 2
-                  ? `🚫 Ya usaste tus 2 clases de recuperación de este mes. Podés usar la siguiente a partir del mes que viene.`
-                  : `💡 Usaste ${recuperacionesMes} de 2 clases de recuperación disponibles este mes.`
-                }
-              </div>
-            )}
+            {tipoReserva === 'recuperacion' && (() => {
+              const mesTurno = modal?.fecha?.substring(0, 7) || ''
+              const usadasEseMes = recuperacionesPorMes[mesTurno] || 0
+              const mesNombre = mesTurno ? new Date(mesTurno + '-15').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }) : ''
+              return (
+                <div className={`alert ${usadasEseMes >= 2 ? 'alert-error' : 'alert-info'}`} style={{ fontSize: '0.88rem' }}>
+                  {usadasEseMes >= 2
+                    ? `🚫 Ya usaste tus 2 clases de recuperación de ${mesNombre}. No podés reservar más ese mes.`
+                    : `💡 Usaste ${usadasEseMes} de 2 recuperaciones disponibles en ${mesNombre}.`
+                  }
+                </div>
+              )
+            })()}
 
             {tipoReserva === 'fija' && (
               <div className="alert alert-info" style={{ fontSize: '0.88rem' }}>
@@ -268,7 +276,7 @@ export default function ReservarTurno({ bloqueada }) {
 
             <div className="modal-actions">
               <button className="btn btn-primary" onClick={confirmarReserva}
-                disabled={guardando || (tipoReserva === 'recuperacion' && recuperacionesMes >= 2)}
+                disabled={guardando || (tipoReserva === 'recuperacion' && (recuperacionesPorMes[modal?.fecha?.substring(0,7)] || 0) >= 2)}
                 style={{ flex: 1 }}>
                 {guardando ? 'Guardando...' : 'Confirmar'}
               </button>
