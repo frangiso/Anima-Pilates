@@ -112,7 +112,7 @@ export default function ReservarTurno({ bloqueada }) {
         fecha: modal.fecha,
         hora: modal.hora,
         tipo: tipoReserva,
-        estado: tipoReserva === 'fija' ? 'pendiente' : 'confirmada',
+        estado: (tipoReserva === 'fija' || tipoReserva === 'recuperacion') ? 'pendiente' : 'confirmada',
         creadoEn: serverTimestamp()
       })
       await addDoc(collection(db, 'notificaciones'), {
@@ -123,7 +123,7 @@ export default function ReservarTurno({ bloqueada }) {
         creadoEn: serverTimestamp(),
         datos: { alumnaId: user.uid, fecha: modal.fecha, hora: modal.hora }
       })
-      setMsg({ tipo: 'exito', texto: tipoReserva === 'fija' ? '¡Solicitud enviada! La profesora la confirmará pronto.' : '¡Clase de recuperación reservada con éxito!' })
+      setMsg({ tipo: 'exito', texto: (tipoReserva === 'fija' || tipoReserva === 'recuperacion') ? '¡Solicitud enviada! La profesora la confirmará pronto.' : '¡Turno reservado con éxito!' })
       setModal(null)
       await cargarSemana()
     } catch {
