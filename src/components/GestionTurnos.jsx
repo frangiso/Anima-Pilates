@@ -83,19 +83,19 @@ export default function GestionTurnos() {
     setCargando(false)
   }
 
-  async function aprobar(id, alumnaId, fecha, hora) {
+  async function aprobar(id, alumnaId, fecha, hora, alumnaNombre) {
     await updateDoc(doc(db, 'reservas', id), { estado: 'confirmada' })
+    const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
+    // Notificacion para la profe
     await addDoc(collection(db, 'notificaciones'), {
       tipo: 'turno_aprobado',
-      titulo: 'Turno aprobado',
-      mensaje: `Tu solicitud de turno fue aprobada.`,
-      alumnaId,
+      titulo: 'Turno confirmado',
+      mensaje: `Turno de ${alumnaNombre || 'alumna'}${fechaStr ? ` — ${fechaStr}` : ''}${hora ? ` a las ${hora}hs` : ''} confirmado.`,
       leida: false,
       creadoEn: serverTimestamp()
     })
     // Aviso para la alumna
     if (alumnaId) {
-      const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
       await addDoc(collection(db, 'avisos'), {
         alumnaId,
         tipo: 'turno_aprobado',
@@ -109,19 +109,19 @@ export default function GestionTurnos() {
     await cargar()
   }
 
-  async function rechazar(id, alumnaId, fecha, hora) {
+  async function rechazar(id, alumnaId, fecha, hora, alumnaNombre) {
     await updateDoc(doc(db, 'reservas', id), { estado: 'cancelada' })
+    const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
+    // Notificacion para la profe
     await addDoc(collection(db, 'notificaciones'), {
       tipo: 'turno_rechazado',
-      titulo: 'Turno no aprobado',
-      mensaje: 'Tu solicitud de turno no pudo ser aprobada.',
-      alumnaId,
+      titulo: 'Turno rechazado',
+      mensaje: `Solicitud de ${alumnaNombre || 'alumna'}${fechaStr ? ` — ${fechaStr}` : ''}${hora ? ` a las ${hora}hs` : ''} rechazada.`,
       leida: false,
       creadoEn: serverTimestamp()
     })
     // Aviso para la alumna
     if (alumnaId) {
-      const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
       await addDoc(collection(db, 'avisos'), {
         alumnaId,
         tipo: 'turno_rechazado',
@@ -286,9 +286,9 @@ export default function GestionTurnos() {
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button className="btn btn-primary" style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.88rem' }}
-                      onClick={() => aprobar(r.id, r.alumnaId, r.fecha, r.hora)}>✓ Aprobar</button>
+                      onClick={() => aprobar(r.id, r.alumnaId, r.fecha, r.hora, r.alumnaNombre)}>✓ Aprobar</button>
                     <button className="btn btn-danger" style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.88rem' }}
-                      onClick={() => rechazar(r.id, r.alumnaId, r.fecha, r.hora)}>✗ Rechazar</button>
+                      onClick={() => rechazar(r.id, r.alumnaId, r.fecha, r.hora, r.alumnaNombre)}>✗ Rechazar</button>
                   </div>
                 </div>
               ))}
