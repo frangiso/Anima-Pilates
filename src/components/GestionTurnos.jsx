@@ -83,30 +83,54 @@ export default function GestionTurnos() {
     setCargando(false)
   }
 
-  async function aprobar(id, alumnaId) {
+  async function aprobar(id, alumnaId, fecha, hora) {
     await updateDoc(doc(db, 'reservas', id), { estado: 'confirmada' })
     await addDoc(collection(db, 'notificaciones'), {
       tipo: 'turno_aprobado',
-      titulo: 'Turno fijo aprobado',
-      mensaje: 'Tu solicitud de turno fijo fue aprobada.',
+      titulo: 'Turno aprobado',
+      mensaje: `Tu solicitud de turno fue aprobada.`,
       alumnaId,
       leida: false,
       creadoEn: serverTimestamp()
     })
+    // Aviso para la alumna
+    if (alumnaId) {
+      const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
+      await addDoc(collection(db, 'avisos'), {
+        alumnaId,
+        tipo: 'turno_aprobado',
+        titulo: '✅ Turno confirmado',
+        mensaje: `Tu solicitud de turno${fechaStr ? ` del ${fechaStr}` : ''}${hora ? ` a las ${hora}hs` : ''} fue aprobada. ¡Te esperamos!`,
+        leido: false,
+        creadoEn: serverTimestamp()
+      })
+    }
     setMsg({ tipo: 'exito', texto: 'Turno aprobado.' })
     await cargar()
   }
 
-  async function rechazar(id, alumnaId) {
+  async function rechazar(id, alumnaId, fecha, hora) {
     await updateDoc(doc(db, 'reservas', id), { estado: 'cancelada' })
     await addDoc(collection(db, 'notificaciones'), {
       tipo: 'turno_rechazado',
-      titulo: 'Turno fijo no aprobado',
-      mensaje: 'Tu solicitud de turno fijo no pudo ser aprobada. Contactá a la profesora.',
+      titulo: 'Turno no aprobado',
+      mensaje: 'Tu solicitud de turno no pudo ser aprobada.',
       alumnaId,
       leida: false,
       creadoEn: serverTimestamp()
     })
+    // Aviso para la alumna
+    if (alumnaId) {
+      const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
+      await addDoc(collection(db, 'avisos'), {
+        alumnaId,
+        tipo: 'turno_rechazado',
+        titulo: '❌ Turno no aprobado',
+        mensaje: `Tu solicitud de turno${fechaStr ? ` del ${fechaStr}` : ''}${hora ? ` a las ${hora}hs` : ''} no pudo ser aprobada. Contactá a la profesora para más información.`,
+        leido: false,
+        creadoEn: serverTimestamp()
+      })
+    }
     setMsg({ tipo: 'exito', texto: 'Turno rechazado.' })
     await cargar()
   }
@@ -262,9 +286,9 @@ export default function GestionTurnos() {
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button className="btn btn-primary" style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.88rem' }}
-                      onClick={() => aprobar(r.id, r.alumnaId)}>✓ Aprobar</button>
+                      onClick={() => aprobar(r.id, r.alumnaId, r.fecha, r.hora)}>✓ Aprobar</button>
                     <button className="btn btn-danger" style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.88rem' }}
-                      onClick={() => rechazar(r.id, r.alumnaId)}>✗ Rechazar</button>
+                      onClick={() => rechazar(r.id, r.alumnaId, r.fecha, r.hora)}>✗ Rechazar</button>
                   </div>
                 </div>
               ))}

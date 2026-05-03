@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, Timestamp } from 'firebase/firestore'
+import { collection, getDocs, doc, updateDoc, deleteDoc, addDoc, query, where, Timestamp, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 
 const PLANES = ['Plan mensual — 2 veces/semana', 'Plan mensual — 3 veces/semana', 'Plan mensual — libre', 'Pack 8 clases', 'Pack 12 clases', 'Clase suelta']
@@ -69,6 +69,20 @@ export default function GestionAlumnas() {
       datos.planVencimiento = Timestamp.fromDate(new Date(form.planVencimiento + 'T12:00'))
     }
     await updateDoc(doc(db, 'usuarios', editando), datos)
+
+    // Si se asignó o cambió el plan, crear aviso para la alumna
+    const alumnaActual = alumnas.find(a => a.id === editando)
+    if (form.plan && form.plan !== alumnaActual?.plan) {
+      await addDoc(collection(db, 'avisos'), {
+        alumnaId: editando,
+        tipo: 'plan_renovado',
+        titulo: '🌿 Plan renovado',
+        mensaje: `Tu plan en Anima Pilates ha sido renovado con éxito. Plan activo: ${form.plan}. ¡Te esperamos en clase!`,
+        leido: false,
+        creadoEn: serverTimestamp()
+      })
+    }
+
     setMsg({ tipo: 'exito', texto: 'Alumna actualizada correctamente.' })
     setEditando(null)
     await buscar()
