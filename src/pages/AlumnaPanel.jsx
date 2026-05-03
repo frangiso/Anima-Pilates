@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import MiPlan from '../components/MiPlan'
 import ReservarTurno from '../components/ReservarTurno'
 import MisReservas from '../components/MisReservas'
+import AvisoAlumna from '../components/AvisoAlumna'
 
 export default function AlumnaPanel() {
   const { perfil } = useAuth()
@@ -17,7 +18,6 @@ export default function AlumnaPanel() {
     navigate('/')
   }
 
-  
   const bloqueada = perfil?.deuda || perfil?.estado === 'inactiva'
 
   return (
@@ -35,6 +35,10 @@ export default function AlumnaPanel() {
       </nav>
 
       <div className="page-container">
+        {/* Aviso de la profe */}
+        <AvisoAlumna />
+
+        {/* Alerta de bloqueo */}
         {bloqueada && (
           <div className="alert alert-error" style={{ fontSize: '1rem', marginBottom: 20 }}>
             🚫 <strong>Tu cuenta está bloqueada.</strong>{' '}
