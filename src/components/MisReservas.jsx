@@ -37,8 +37,8 @@ export default function MisReservas() {
     }
     setCancelando(id)
     await updateDoc(doc(db, 'reservas', id), { estado: 'cancelada' })
+    setReservas(prev => prev.filter(r => r.id !== id))
     setMsg({ tipo: 'exito', texto: 'Turno cancelado correctamente.' })
-    await cargar()
     setCancelando(null)
   }
 

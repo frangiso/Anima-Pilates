@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
@@ -38,19 +38,43 @@ export default function ReservarTurno({ bloqueada }) {
   const [recuperacionesPorMes, setRecuperacionesPorMes] = useState({})
 
   const horas = getHoras()
+  const feriadosCargados = useRef(false)
+
+  // Carga feriados una sola vez al montar
+  useEffect(() => {
+    if (feriadosCargados.current) return
+    feriadosCargados.current = true
+    getDocs(collection(db, 'feriados'))
+      .then(snap => setFeriados(snap.docs.map(d => d.data().fecha)))
+  }, [])
+
+  // Carga recuperaciones una sola vez al montar (no depende de la semana)
+  useEffect(() => {
+    if (!user) return
+    getDocs(query(
+      collection(db, 'reservas'),
+      where('alumnaId', '==', user.uid),
+      where('tipo', '==', 'recuperacion'),
+      where('estado', 'in', ['confirmada', 'pendiente'])
+    )).then(snap => {
+      const conteo = {}
+      snap.docs.forEach(d => {
+        const mes = (d.data().fecha || '').substring(0, 7)
+        if (mes) conteo[mes] = (conteo[mes] || 0) + 1
+      })
+      setRecuperacionesPorMes(conteo)
+    })
+  }, [])
 
   useEffect(() => { cargarSemana() }, [semana])
 
   async function cargarSemana() {
     setCargando(true)
     const fechas = DIAS.map((_, i) => fechaISO(addDays(semana, i)))
-    const [snapRes, snapFer] = await Promise.all([
-      getDocs(query(collection(db, 'reservas'),
-        where('fecha', 'in', fechas),
-        where('estado', 'in', ['confirmada', 'pendiente'])
-      )),
-      getDocs(collection(db, 'feriados'))
-    ])
+    const snapRes = await getDocs(query(collection(db, 'reservas'),
+      where('fecha', 'in', fechas),
+      where('estado', 'in', ['confirmada', 'pendiente'])
+    ))
     const mapa = {}
     const mias = {}
     snapRes.forEach(d => {
@@ -61,23 +85,6 @@ export default function ReservarTurno({ bloqueada }) {
     })
     setReservas(mapa)
     setMisReservas(mias)
-    setFeriados(snapFer.docs.map(d => d.data().fecha))
-
-    // Contar recuperaciones por mes (para limitar 2 por mes)
-    const snapRec = await getDocs(query(
-      collection(db, 'reservas'),
-      where('alumnaId', '==', user.uid),
-      where('tipo', '==', 'recuperacion'),
-      where('estado', 'in', ['confirmada', 'pendiente'])
-    ))
-    const conteoMeses = {}
-    snapRec.docs.forEach(d => {
-      const fecha = d.data().fecha || ''
-      const mes = fecha.substring(0, 7) // YYYY-MM
-      if (mes) conteoMeses[mes] = (conteoMeses[mes] || 0) + 1
-    })
-    setRecuperacionesPorMes(conteoMeses)
-
     setCargando(false)
   }
 
@@ -124,6 +131,10 @@ export default function ReservarTurno({ bloqueada }) {
         datos: { alumnaId: user.uid, fecha: modal.fecha, hora: modal.hora }
       })
       setMsg({ tipo: 'exito', texto: (tipoReserva === 'fija' || tipoReserva === 'recuperacion') ? '¡Solicitud enviada! La profesora la confirmará pronto.' : '¡Turno reservado con éxito!' })
+      if (tipoReserva === 'recuperacion') {
+        const mes = modal.fecha.substring(0, 7)
+        setRecuperacionesPorMes(prev => ({ ...prev, [mes]: (prev[mes] || 0) + 1 }))
+      }
       setModal(null)
       await cargarSemana()
     } catch {

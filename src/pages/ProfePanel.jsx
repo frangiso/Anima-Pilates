@@ -130,13 +130,27 @@ export default function ProfePanel() {
           <button className={`tab ${tab === 'sincronizar' ? 'active' : ''}`} onClick={() => setTab('sincronizar')}>🔄 Sincronizar</button>
         </div>
 
-        {tab === 'dashboard' && <PanelDashboard />}
-        {tab === 'alumnas' && <GestionAlumnas />}
-        {tab === 'turnos' && <GestionTurnos />}
-        {tab === 'pagos' && <GestionPagos />}
-        {tab === 'historial' && <HistorialAsistencias />}
-        {tab === 'notif' && <Notificaciones />}
-        {tab === 'sincronizar' && <Sincronizar />}
+        <div style={{ display: tab === 'dashboard' ? 'block' : 'none' }}>
+          <PanelDashboard />
+        </div>
+        <div style={{ display: tab === 'alumnas' ? 'block' : 'none' }}>
+          <GestionAlumnas />
+        </div>
+        <div style={{ display: tab === 'turnos' ? 'block' : 'none' }}>
+          <GestionTurnos />
+        </div>
+        <div style={{ display: tab === 'pagos' ? 'block' : 'none' }}>
+          <GestionPagos />
+        </div>
+        <div style={{ display: tab === 'historial' ? 'block' : 'none' }}>
+          <HistorialAsistencias />
+        </div>
+        <div style={{ display: tab === 'notif' ? 'block' : 'none' }}>
+          <Notificaciones />
+        </div>
+        <div style={{ display: tab === 'sincronizar' ? 'block' : 'none' }}>
+          <Sincronizar />
+        </div>
       </div>
     </div>
   )

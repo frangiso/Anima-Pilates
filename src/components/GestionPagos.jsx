@@ -14,29 +14,30 @@ export default function GestionPagos() {
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState(null)
 
-  async function buscar() {
-    setCargando(true)
-    setBuscado(true)
-    const snap = await getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
-    const todas = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-
-    const resultado = todas.filter(a => {
+  function aplicarFiltro(lista, textoBusqueda, filtroActual) {
+    const resultado = lista.filter(a => {
       const texto = `${a.nombre} ${a.apellido} ${a.telefono}`.toLowerCase()
-      const coincideTexto = !busqueda.trim() || texto.includes(busqueda.toLowerCase())
+      const coincideTexto = !textoBusqueda.trim() || texto.includes(textoBusqueda.toLowerCase())
       const coincideFiltro =
-        filtro === 'deuda' ? a.deuda :
-        filtro === 'al-dia' ? !a.deuda :
+        filtroActual === 'deuda' ? a.deuda :
+        filtroActual === 'al-dia' ? !a.deuda :
         true
       return coincideTexto && coincideFiltro
     })
-
     resultado.sort((a, b) => {
       if (a.deuda && !b.deuda) return -1
       if (!a.deuda && b.deuda) return 1
       return (a.apellido || '').localeCompare(b.apellido || '')
     })
+    return resultado
+  }
 
-    setAlumnas(resultado)
+  async function buscar() {
+    setCargando(true)
+    setBuscado(true)
+    const snap = await getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
+    const todas = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    setAlumnas(aplicarFiltro(todas, busqueda, filtro))
     setCargando(false)
   }
 
@@ -60,17 +61,23 @@ export default function GestionPagos() {
       leida: false,
       creadoEn: serverTimestamp()
     })
+    setAlumnas(prev => aplicarFiltro(
+      prev.map(x => x.id === a.id ? { ...x, deuda: false } : x),
+      busqueda, filtro
+    ))
     setMsg({ tipo: 'exito', texto: `Pago de ${a.nombre} registrado.` })
     setModal(null)
     setMonto('')
     setDetalle('')
-    await buscar()
     setGuardando(false)
   }
 
   async function toggleDeuda(a) {
     await updateDoc(doc(db, 'usuarios', a.id), { deuda: !a.deuda })
-    await buscar()
+    setAlumnas(prev => aplicarFiltro(
+      prev.map(x => x.id === a.id ? { ...x, deuda: !a.deuda } : x),
+      busqueda, filtro
+    ))
   }
 
   const conDeuda = alumnas.filter(a => a.deuda).length

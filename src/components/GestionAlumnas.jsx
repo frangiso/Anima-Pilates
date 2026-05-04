@@ -16,6 +16,21 @@ export default function GestionAlumnas() {
   const [msg, setMsg] = useState(null)
   const [filtro, setFiltro] = useState('todas')
 
+  function aplicarFiltro(lista, textoBusqueda, filtroActual) {
+    const resultado = lista.filter(a => {
+      const texto = `${a.nombre} ${a.apellido} ${a.telefono} ${a.email}`.toLowerCase()
+      const coincideTexto = !textoBusqueda.trim() || texto.includes(textoBusqueda.toLowerCase())
+      const coincideFiltro =
+        filtroActual === 'todas' ? true :
+        filtroActual === 'deuda' ? a.deuda :
+        filtroActual === 'inactiva' ? a.estado === 'inactiva' :
+        filtroActual === 'sin-plan' ? !a.plan : true
+      return coincideTexto && coincideFiltro
+    })
+    resultado.sort((a, b) => (a.apellido || '').localeCompare(b.apellido || ''))
+    return resultado
+  }
+
   async function buscar() {
     if (!busqueda.trim() && filtro === 'todas') return
     setCargando(true)
@@ -23,20 +38,7 @@ export default function GestionAlumnas() {
 
     const snap = await getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
     const todas = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-
-    const resultado = todas.filter(a => {
-      const texto = `${a.nombre} ${a.apellido} ${a.telefono} ${a.email}`.toLowerCase()
-      const coincideTexto = !busqueda.trim() || texto.includes(busqueda.toLowerCase())
-      const coincideFiltro =
-        filtro === 'todas' ? true :
-        filtro === 'deuda' ? a.deuda :
-        filtro === 'inactiva' ? a.estado === 'inactiva' :
-        filtro === 'sin-plan' ? !a.plan : true
-      return coincideTexto && coincideFiltro
-    })
-
-    resultado.sort((a, b) => (a.apellido || '').localeCompare(b.apellido || ''))
-    setAlumnas(resultado)
+    setAlumnas(aplicarFiltro(todas, busqueda, filtro))
     setCargando(false)
   }
 
@@ -83,9 +85,12 @@ export default function GestionAlumnas() {
       })
     }
 
+    setAlumnas(prev => aplicarFiltro(
+      prev.map(a => a.id === editando ? { ...a, ...datos } : a),
+      busqueda, filtro
+    ))
     setMsg({ tipo: 'exito', texto: 'Alumna actualizada correctamente.' })
     setEditando(null)
-    await buscar()
     setGuardando(false)
   }
 
@@ -93,9 +98,9 @@ export default function GestionAlumnas() {
     if (!eliminando) return
     setGuardando(true)
     await deleteDoc(doc(db, 'usuarios', eliminando.id))
+    setAlumnas(prev => prev.filter(a => a.id !== eliminando.id))
     setMsg({ tipo: 'exito', texto: `${eliminando.nombre} ${eliminando.apellido} fue eliminada.` })
     setEliminando(null)
-    await buscar()
     setGuardando(false)
   }
 
