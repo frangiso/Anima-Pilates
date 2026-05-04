@@ -33,19 +33,15 @@ export default function GestionTurnos() {
   const [tab, setTab] = useState('pendientes')
   const [msg, setMsg] = useState(null)
 
-  // Modal reservar por alumna
-  const [modalReserva, setModalReserva] = useState(null) // { fecha, hora }
+  const [modalReserva, setModalReserva] = useState(null)
+  const [modalDetalle, setModalDetalle] = useState(null)
   const [alumnaSelec, setAlumnaSelec] = useState('')
   const [tipoReserva, setTipoReserva] = useState('unica')
   const [guardando, setGuardando] = useState(false)
-  const [modoExterno, setModoExterno] = useState(false) // true = alumna sin cuenta
+  const [modoExterno, setModoExterno] = useState(false)
   const [nombreExterno, setNombreExterno] = useState('')
   const [telefonoExterno, setTelefonoExterno] = useState('')
 
-  // Modal detalle turno (ver y quitar alumnas)
-  const [modalDetalle, setModalDetalle] = useState(null) // { fecha, hora, reservas }
-
-  // Feriados
   const [nuevaFecha, setNuevaFecha] = useState('')
   const [nuevaDesc, setNuevaDesc] = useState('')
 
@@ -62,9 +58,7 @@ export default function GestionTurnos() {
 
   async function cargarAlumnas() {
     const snap = await getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
-    const lista = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(u => u.rol === 'alumna' && u.estado !== 'inactiva')
+    const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.estado !== 'inactiva')
     lista.sort((a, b) => (a.apellido || '').localeCompare(b.apellido || ''))
     setAlumnas(lista)
   }
@@ -137,11 +131,8 @@ export default function GestionTurnos() {
 
   async function toggleBloqueo(fecha, hora) {
     const existe = bloqueados.find(b => b.fecha === fecha && b.hora === hora)
-    if (existe) {
-      await deleteDoc(doc(db, 'bloqueados', existe.id))
-    } else {
-      await addDoc(collection(db, 'bloqueados'), { fecha, hora, creadoEn: serverTimestamp() })
-    }
+    if (existe) await deleteDoc(doc(db, 'bloqueados', existe.id))
+    else await addDoc(collection(db, 'bloqueados'), { fecha, hora, creadoEn: serverTimestamp() })
     await cargar()
   }
 
@@ -152,7 +143,6 @@ export default function GestionTurnos() {
     setGuardando(true)
     try {
       if (modoExterno) {
-        // Alumna sin cuenta — guardar con nombre manual
         await addDoc(collection(db, 'reservas'), {
           alumnaId: null,
           alumnaNombre: nombreExterno.trim(),
@@ -206,15 +196,10 @@ export default function GestionTurnos() {
 
   async function agregarFeriado() {
     if (!nuevaFecha) return
-    // Verificar que no exista ya
     const existe = feriados.find(f => f.fecha === nuevaFecha)
     if (existe) { setMsg({ tipo: 'error', texto: 'Ese día ya está marcado como feriado.' }); return }
-    await addDoc(collection(db, 'feriados'), {
-      fecha: nuevaFecha,
-      descripcion: nuevaDesc || 'Feriado',
-      creadoEn: serverTimestamp()
-    })
-    setMsg({ tipo: 'exito', texto: 'Feriado agregado. Las alumnas no podrán reservar ese día.' })
+    await addDoc(collection(db, 'feriados'), { fecha: nuevaFecha, descripcion: nuevaDesc || 'Feriado', creadoEn: serverTimestamp() })
+    setMsg({ tipo: 'exito', texto: 'Feriado agregado.' })
     setNuevaFecha('')
     setNuevaDesc('')
     await cargar()
@@ -242,7 +227,6 @@ export default function GestionTurnos() {
         </div>
       )}
 
-      {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
           { key: 'pendientes', label: '⏳ Pendientes', badge: pendientes.length },
@@ -251,7 +235,7 @@ export default function GestionTurnos() {
         ].map(t => (
           <button key={t.key}
             className={`btn ${tab === t.key ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.9rem', position: 'relative' }}
+            style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.9rem' }}
             onClick={() => setTab(t.key)}>
             {t.label}
             {t.badge > 0 && (
@@ -264,13 +248,13 @@ export default function GestionTurnos() {
         ))}
       </div>
 
-      {/* ── TAB PENDIENTES ── */}
+      {/* PENDIENTES */}
       {tab === 'pendientes' && (
         <div>
           {pendientes.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', padding: 40 }}>
               <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>✓</div>
-              <p style={{ color: '#5a6b60' }}>No hay solicitudes pendientes de aprobación.</p>
+              <p style={{ color: '#5a6b60' }}>No hay solicitudes pendientes.</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -282,7 +266,9 @@ export default function GestionTurnos() {
                       📅 {new Date(r.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
                       {' '} · 🕐 {r.hora} hs
                     </div>
-                    <span className="badge badge-amarillo" style={{ marginTop: 6 }}>Turno fijo solicitado</span>
+                    <span className={`badge ${r.tipo === 'recuperacion' ? 'badge-amarillo' : 'badge-gris'}`} style={{ marginTop: 6 }}>
+                      {r.tipo === 'recuperacion' ? 'Clase de recuperación' : 'Turno fijo solicitado'}
+                    </span>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button className="btn btn-primary" style={{ padding: '8px 16px', minHeight: 38, fontSize: '0.88rem' }}
@@ -297,31 +283,29 @@ export default function GestionTurnos() {
         </div>
       )}
 
-      {/* ── TAB GRILLA ── */}
+      {/* GRILLA */}
       {tab === 'grilla' && (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button className="btn btn-ghost" onClick={() => setSemana(addDays(semana, -7))}
-                style={{ padding: '8px 14px', minHeight: 38 }}>← Anterior</button>
+              <button className="btn btn-ghost" onClick={() => setSemana(addDays(semana, -7))} style={{ padding: '8px 14px', minHeight: 38 }}>← Anterior</button>
               <span style={{ fontSize: '0.9rem', color: '#5a6b60', fontWeight: 700 }}>
                 {addDays(semana, 0).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} –{' '}
                 {addDays(semana, 4).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
               </span>
-              <button className="btn btn-ghost" onClick={() => setSemana(addDays(semana, 7))}
-                style={{ padding: '8px 14px', minHeight: 38 }}>Siguiente →</button>
+              <button className="btn btn-ghost" onClick={() => setSemana(addDays(semana, 7))} style={{ padding: '8px 14px', minHeight: 38 }}>Siguiente →</button>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 12, marginBottom: 12, fontSize: '0.82rem', flexWrap: 'wrap' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#d4edda', display: 'inline-block' }} /> Libre — click para reservar
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#d4edda', display: 'inline-block' }} /> Libre
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 12, height: 12, borderRadius: 3, background: '#4a7c59', display: 'inline-block' }} /> Con alumnas
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#e9ecef', display: 'inline-block' }} /> Bloqueado — click para desbloquear
+              <span style={{ width: 12, height: 12, borderRadius: 3, background: '#e9ecef', display: 'inline-block' }} /> Bloqueado
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 12, height: 12, borderRadius: 3, background: '#fde8e8', display: 'inline-block' }} /> Feriado
@@ -392,72 +376,50 @@ export default function GestionTurnos() {
               ))}
             </div>
           </div>
-
-          <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            <p style={{ fontSize: '0.82rem', color: '#5a6b60', alignSelf: 'center' }}>
-              Click derecho en cualquier celda libre o con alumnas para agregar una reserva. Click en 🔒 para desbloquear.
-            </p>
-          </div>
         </>
       )}
 
-      {/* ── TAB FERIADOS ── */}
+      {/* FERIADOS */}
       {tab === 'feriados' && (
         <div>
           <div className="card" style={{ marginBottom: 20 }}>
             <h4 style={{ color: '#4a7c59', marginBottom: 16, fontSize: '1.1rem' }}>Agregar feriado o día sin clases</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'end' }}>
               <div className="input-group" style={{ marginBottom: 0 }}>
                 <label>Fecha</label>
                 <input type="date" value={nuevaFecha} onChange={e => setNuevaFecha(e.target.value)} />
               </div>
               <div className="input-group" style={{ marginBottom: 0 }}>
                 <label>Descripción (opcional)</label>
-                <input type="text" value={nuevaDesc} onChange={e => setNuevaDesc(e.target.value)}
-                  placeholder="Ej: Año Nuevo, Vacaciones..." />
+                <input type="text" value={nuevaDesc} onChange={e => setNuevaDesc(e.target.value)} placeholder="Ej: Año Nuevo..." />
               </div>
-              <button className="btn btn-primary" onClick={agregarFeriado} disabled={!nuevaFecha}
-                style={{ minHeight: 50, whiteSpace: 'nowrap' }}>
+              <button className="btn btn-primary" onClick={agregarFeriado} disabled={!nuevaFecha} style={{ minHeight: 50 }}>
                 + Agregar
               </button>
-            </div>
-            <div className="alert alert-info" style={{ marginTop: 14, fontSize: '0.88rem' }}>
-              📌 Los días marcados como feriado aparecen bloqueados en la grilla y las alumnas no pueden reservar turnos en esas fechas.
             </div>
           </div>
 
           {feriados.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', padding: 40 }}>
-              <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📅</div>
               <p style={{ color: '#5a6b60' }}>No hay feriados cargados.</p>
             </div>
           ) : (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <table className="tabla">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Descripción</th>
-                    <th>Acción</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>Fecha</th><th>Descripción</th><th>Acción</th></tr></thead>
                 <tbody>
-                  {feriados
-                    .sort((a, b) => a.fecha.localeCompare(b.fecha))
-                    .map(f => (
-                      <tr key={f.id}>
-                        <td style={{ fontWeight: 700 }}>
-                          {new Date(f.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                        </td>
-                        <td style={{ color: '#5a6b60' }}>{f.descripcion}</td>
-                        <td>
-                          <button className="btn btn-danger" style={{ padding: '7px 14px', minHeight: 34, fontSize: '0.85rem' }}
-                            onClick={() => eliminarFeriado(f.id)}>
-                            Eliminar
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                  {feriados.sort((a, b) => a.fecha.localeCompare(b.fecha)).map(f => (
+                    <tr key={f.id}>
+                      <td style={{ fontWeight: 700 }}>
+                        {new Date(f.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </td>
+                      <td style={{ color: '#5a6b60' }}>{f.descripcion}</td>
+                      <td>
+                        <button className="btn btn-danger" style={{ padding: '7px 14px', minHeight: 34, fontSize: '0.85rem' }}
+                          onClick={() => eliminarFeriado(f.id)}>Eliminar</button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -465,26 +427,25 @@ export default function GestionTurnos() {
         </div>
       )}
 
-      {/* Modal detalle turno — ver y quitar alumnas */}
+      {/* Modal detalle turno */}
       {modalDetalle && (
         <div className="modal-overlay" onClick={() => setModalDetalle(null)}>
           <div className="modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
-            <h3>Turno: {new Date(modalDetalle.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })} · {modalDetalle.hora} hs</h3>
-            <p style={{ color: '#5a6b60', fontSize: '0.9rem', marginBottom: 16 }}>
-              {modalDetalle.resHora.length}/5 lugares ocupados
-            </p>
+            <h3>
+              {new Date(modalDetalle.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })} · {modalDetalle.hora} hs
+            </h3>
+            <p style={{ color: '#5a6b60', fontSize: '0.9rem', marginBottom: 16 }}>{modalDetalle.resHora.length}/5 lugares ocupados</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
               {modalDetalle.resHora.map(r => (
                 <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#f8fdf9', borderRadius: 8, border: '1px solid #c8ddd0' }}>
                   <div>
                     <span style={{ fontWeight: 700 }}>{r.alumnaNombre}</span>
                     {r.tipo === 'fija' && <span className="badge badge-gris" style={{ marginLeft: 8, fontSize: '0.72rem' }}>Fija</span>}
+                    {r.tipo === 'recuperacion' && <span className="badge badge-amarillo" style={{ marginLeft: 8, fontSize: '0.72rem' }}>Recuperación</span>}
                     {r.estado === 'pendiente' && <span className="badge badge-amarillo" style={{ marginLeft: 8, fontSize: '0.72rem' }}>Pendiente</span>}
                   </div>
                   <button className="btn btn-danger" style={{ padding: '6px 12px', minHeight: 32, fontSize: '0.82rem' }}
-                    onClick={() => quitarDeTurnoGrilla(r.id, r.alumnaNombre)}>
-                    Quitar
-                  </button>
+                    onClick={() => quitarDeTurnoGrilla(r.id, r.alumnaNombre)}>Quitar</button>
                 </div>
               ))}
             </div>
@@ -493,9 +454,7 @@ export default function GestionTurnos() {
                 onClick={() => { setModalDetalle(null); setModalReserva({ fecha: modalDetalle.fecha, hora: modalDetalle.hora }) }}>
                 + Agregar alumna
               </button>
-              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setModalDetalle(null)}>
-                Cerrar
-              </button>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setModalDetalle(null)}>Cerrar</button>
             </div>
           </div>
         </div>
@@ -511,29 +470,23 @@ export default function GestionTurnos() {
               {' '} · 🕐 {modalReserva.hora} hs
             </p>
 
-            {/* Alumnas ya anotadas en ese turno */}
             {(() => {
               const yaAnotadas = reservas.filter(r => r.fecha === modalReserva.fecha && r.hora === modalReserva.hora && r.estado !== 'cancelada')
               return yaAnotadas.length > 0 && (
                 <div style={{ marginBottom: 16, padding: '10px 14px', background: '#f0f7f2', borderRadius: 8 }}>
                   <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#5a6b60', marginBottom: 6 }}>Ya anotadas ({yaAnotadas.length}/5):</div>
-                  {yaAnotadas.map(r => (
-                    <div key={r.id} style={{ fontSize: '0.9rem', color: '#2d5a3a' }}>· {r.alumnaNombre}</div>
-                  ))}
+                  {yaAnotadas.map(r => <div key={r.id} style={{ fontSize: '0.9rem', color: '#2d5a3a' }}>· {r.alumnaNombre}</div>)}
                 </div>
               )
             })()}
 
-            {/* Selector de modo */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
-              <button
-                className={`btn ${!modoExterno ? 'btn-primary' : 'btn-ghost'}`}
+              <button className={`btn ${!modoExterno ? 'btn-primary' : 'btn-ghost'}`}
                 style={{ flex: 1, padding: '10px', minHeight: 44, fontSize: '0.9rem' }}
                 onClick={() => { setModoExterno(false); setNombreExterno(''); setTelefonoExterno('') }}>
                 👤 Alumna registrada
               </button>
-              <button
-                className={`btn ${modoExterno ? 'btn-primary' : 'btn-ghost'}`}
+              <button className={`btn ${modoExterno ? 'btn-primary' : 'btn-ghost'}`}
                 style={{ flex: 1, padding: '10px', minHeight: 44, fontSize: '0.9rem' }}
                 onClick={() => { setModoExterno(true); setAlumnaSelec('') }}>
                 ✏️ Sin cuenta en la app
@@ -559,15 +512,11 @@ export default function GestionTurnos() {
               <>
                 <div className="input-group">
                   <label>Nombre completo</label>
-                  <input type="text" value={nombreExterno}
-                    onChange={e => setNombreExterno(e.target.value)}
-                    placeholder="Ej: María García" required />
+                  <input type="text" value={nombreExterno} onChange={e => setNombreExterno(e.target.value)} placeholder="Ej: María García" required />
                 </div>
                 <div className="input-group">
                   <label>Teléfono (opcional)</label>
-                  <input type="tel" value={telefonoExterno}
-                    onChange={e => setTelefonoExterno(e.target.value)}
-                    placeholder="2664123456" />
+                  <input type="tel" value={telefonoExterno} onChange={e => setTelefonoExterno(e.target.value)} placeholder="2664123456" />
                 </div>
               </>
             )}
@@ -576,15 +525,9 @@ export default function GestionTurnos() {
               <label>Tipo de reserva</label>
               <select value={tipoReserva} onChange={e => setTipoReserva(e.target.value)}>
                 <option value="unica">Clase suelta (una sola vez)</option>
-                <option value="fija">Turno fijo semanal (se repite cada semana)</option>
+                <option value="fija">Turno fijo semanal</option>
               </select>
             </div>
-
-            {tipoReserva === 'fija' && (
-              <div className="alert alert-info" style={{ fontSize: '0.88rem' }}>
-                📌 {modoExterno ? 'El turno fijo quedará anotado en el historial.' : 'Este horario se guardará en el perfil de la alumna.'}
-              </div>
-            )}
 
             <div className="modal-actions">
               <button className="btn btn-primary" onClick={reservarPorAlumna}
@@ -592,9 +535,7 @@ export default function GestionTurnos() {
                 {guardando ? 'Guardando...' : 'Confirmar reserva'}
               </button>
               <button className="btn btn-ghost" onClick={() => { setModalReserva(null); setAlumnaSelec(''); setTipoReserva('unica'); setModoExterno(false); setNombreExterno(''); setTelefonoExterno('') }}
-                style={{ flex: 1 }}>
-                Cancelar
-              </button>
+                style={{ flex: 1 }}>Cancelar</button>
             </div>
           </div>
         </div>
