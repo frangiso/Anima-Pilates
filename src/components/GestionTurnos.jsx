@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
+import { useState, useEffect } from 'react'
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, deleteDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
@@ -44,26 +44,16 @@ export default function GestionTurnos() {
 
   const [nuevaFecha, setNuevaFecha] = useState('')
   const [nuevaDesc, setNuevaDesc] = useState('')
-  const feriadosCargados = useRef(false)
 
   async function quitarDeTurnoGrilla(reservaId, alumnaNombre) {
     if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
     await deleteDoc(doc(db, 'reservas', reservaId))
-    setReservas(prev => prev.filter(r => r.id !== reservaId))
+    await cargar()
     setModalDetalle(null)
     setMsg({ tipo: 'exito', texto: `${alumnaNombre} quitada del turno.` })
   }
 
   useEffect(() => { cargarAlumnas() }, [])
-
-  // Feriados: se cargan una sola vez al montar el componente
-  useEffect(() => {
-    if (feriadosCargados.current) return
-    feriadosCargados.current = true
-    getDocs(collection(db, 'feriados'))
-      .then(snap => setFeriados(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-  }, [])
-
   useEffect(() => { cargar() }, [semana])
 
   async function cargarAlumnas() {
@@ -76,18 +66,41 @@ export default function GestionTurnos() {
   async function cargar() {
     setCargando(true)
     const fechas = DIAS.map((_, i) => fechaISO(addDays(semana, i)))
-    const [snapRes, snapBloq] = await Promise.all([
+    const [snapRes, snapBloq, snapFer] = await Promise.all([
       getDocs(query(collection(db, 'reservas'), where('fecha', 'in', fechas))),
       getDocs(query(collection(db, 'bloqueados'), where('fecha', 'in', fechas))),
+      getDocs(collection(db, 'feriados'))
     ])
     setReservas(snapRes.docs.map(d => ({ id: d.id, ...d.data() })))
     setBloqueados(snapBloq.docs.map(d => ({ id: d.id, ...d.data() })))
+    setFeriados(snapFer.docs.map(d => ({ id: d.id, ...d.data() })))
     setCargando(false)
   }
 
   async function aprobar(id, alumnaId, fecha, hora, alumnaNombre) {
     await updateDoc(doc(db, 'reservas', id), { estado: 'confirmada' })
     const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
+
+    // Descontar 1 clase al aprobar
+    if (alumnaId) {
+      const alumnaSnap = await getDoc(doc(db, 'usuarios', alumnaId))
+      if (alumnaSnap.exists()) {
+        const alumna = alumnaSnap.data()
+        const clases = alumna.clasesRestantes ?? null
+        if (clases !== null && clases !== undefined) {
+          const nuevas = Math.max(0, clases - 1)
+          await updateDoc(doc(db, 'usuarios', alumnaId), {
+            clasesRestantes: nuevas,
+            clasesUsadas: (alumna.clasesUsadas || 0) + 1
+          })
+          if (nuevas === 0) {
+            await updateDoc(doc(db, 'usuarios', alumnaId), { deuda: true })
+          }
+        }
+      }
+    }
+
+    // Notificacion para la profe
     await addDoc(collection(db, 'notificaciones'), {
       tipo: 'turno_aprobado',
       titulo: 'Turno confirmado',
@@ -95,6 +108,7 @@ export default function GestionTurnos() {
       leida: false,
       creadoEn: serverTimestamp()
     })
+    // Aviso para la alumna
     if (alumnaId) {
       await addDoc(collection(db, 'avisos'), {
         alumnaId,
@@ -105,13 +119,14 @@ export default function GestionTurnos() {
         creadoEn: serverTimestamp()
       })
     }
-    setReservas(prev => prev.map(r => r.id === id ? { ...r, estado: 'confirmada' } : r))
     setMsg({ tipo: 'exito', texto: 'Turno aprobado.' })
+    await cargar()
   }
 
   async function rechazar(id, alumnaId, fecha, hora, alumnaNombre) {
     await updateDoc(doc(db, 'reservas', id), { estado: 'cancelada' })
     const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
+    // Notificacion para la profe
     await addDoc(collection(db, 'notificaciones'), {
       tipo: 'turno_rechazado',
       titulo: 'Turno rechazado',
@@ -119,6 +134,7 @@ export default function GestionTurnos() {
       leida: false,
       creadoEn: serverTimestamp()
     })
+    // Aviso para la alumna
     if (alumnaId) {
       await addDoc(collection(db, 'avisos'), {
         alumnaId,
@@ -129,19 +145,15 @@ export default function GestionTurnos() {
         creadoEn: serverTimestamp()
       })
     }
-    setReservas(prev => prev.map(r => r.id === id ? { ...r, estado: 'cancelada' } : r))
     setMsg({ tipo: 'exito', texto: 'Turno rechazado.' })
+    await cargar()
   }
 
   async function toggleBloqueo(fecha, hora) {
     const existe = bloqueados.find(b => b.fecha === fecha && b.hora === hora)
-    if (existe) {
-      await deleteDoc(doc(db, 'bloqueados', existe.id))
-      setBloqueados(prev => prev.filter(b => b.id !== existe.id))
-    } else {
-      const ref = await addDoc(collection(db, 'bloqueados'), { fecha, hora, creadoEn: serverTimestamp() })
-      setBloqueados(prev => [...prev, { id: ref.id, fecha, hora }])
-    }
+    if (existe) await deleteDoc(doc(db, 'bloqueados', existe.id))
+    else await addDoc(collection(db, 'bloqueados'), { fecha, hora, creadoEn: serverTimestamp() })
+    await cargar()
   }
 
   async function reservarPorAlumna() {
@@ -195,7 +207,6 @@ export default function GestionTurnos() {
       setTelefonoExterno('')
       setTipoReserva('unica')
       setModoExterno(false)
-      // Recargar la semana para reflejar la nueva reserva en la grilla
       await cargar()
     } catch {
       setMsg({ tipo: 'error', texto: 'Error al reservar. Intentá nuevamente.' })
@@ -207,17 +218,17 @@ export default function GestionTurnos() {
     if (!nuevaFecha) return
     const existe = feriados.find(f => f.fecha === nuevaFecha)
     if (existe) { setMsg({ tipo: 'error', texto: 'Ese día ya está marcado como feriado.' }); return }
-    const ref = await addDoc(collection(db, 'feriados'), { fecha: nuevaFecha, descripcion: nuevaDesc || 'Feriado', creadoEn: serverTimestamp() })
-    setFeriados(prev => [...prev, { id: ref.id, fecha: nuevaFecha, descripcion: nuevaDesc || 'Feriado' }])
+    await addDoc(collection(db, 'feriados'), { fecha: nuevaFecha, descripcion: nuevaDesc || 'Feriado', creadoEn: serverTimestamp() })
     setMsg({ tipo: 'exito', texto: 'Feriado agregado.' })
     setNuevaFecha('')
     setNuevaDesc('')
+    await cargar()
   }
 
   async function eliminarFeriado(id) {
     await deleteDoc(doc(db, 'feriados', id))
-    setFeriados(prev => prev.filter(f => f.id !== id))
     setMsg({ tipo: 'exito', texto: 'Feriado eliminado.' })
+    await cargar()
   }
 
   const pendientes = reservas.filter(r => r.estado === 'pendiente')

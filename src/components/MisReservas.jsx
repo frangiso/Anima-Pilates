@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 
@@ -36,9 +36,33 @@ export default function MisReservas() {
       return
     }
     setCancelando(id)
+
+    // Buscar la reserva para saber el estado
+    const reserva = reservas.find(r => r.id === id)
     await updateDoc(doc(db, 'reservas', id), { estado: 'cancelada' })
-    setReservas(prev => prev.filter(r => r.id !== id))
-    setMsg({ tipo: 'exito', texto: 'Turno cancelado correctamente.' })
+
+    // Solo devolver clase si el turno estaba CONFIRMADO (ya se había descontado al aprobar)
+    if (reserva?.estado === 'confirmada' && reserva?.alumnaId) {
+      const alumnaSnap = await getDoc(doc(db, 'usuarios', reserva.alumnaId))
+      if (alumnaSnap.exists()) {
+        const alumna = alumnaSnap.data()
+        const clases = alumna.clasesRestantes ?? null
+        if (clases !== null && clases !== undefined) {
+          const nuevasClases = clases + 1
+          await updateDoc(doc(db, 'usuarios', reserva.alumnaId), {
+            clasesRestantes: nuevasClases,
+            clasesUsadas: Math.max(0, (alumna.clasesUsadas || 0) - 1)
+          })
+          // Si tenía deuda por quedarse sin clases, quitarla
+          if (alumna.deuda && clases === 0) {
+            await updateDoc(doc(db, 'usuarios', reserva.alumnaId), { deuda: false })
+          }
+        }
+      }
+    }
+
+    setMsg({ tipo: 'exito', texto: reserva?.estado === 'confirmada' ? 'Turno cancelado. Tu clase fue devuelta.' : 'Turno cancelado correctamente.' })
+    await cargar()
     setCancelando(null)
   }
 
@@ -77,34 +101,32 @@ export default function MisReservas() {
               const puedeCancelar = diffHs >= 2
               return (
                 <div key={r.id} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '14px 16px',
-                  background: '#f8fdf9',
-                  borderRadius: 10,
-                  border: '1px solid #c8ddd0',
-                  flexWrap: 'wrap',
-                  gap: 10
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '14px 16px', background: '#f8fdf9', borderRadius: 10,
+                  border: '1px solid #c8ddd0', flexWrap: 'wrap', gap: 10
                 }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '1rem', textTransform: 'capitalize' }}>{fechaStr}</div>
                     <div style={{ color: '#5a6b60', fontSize: '0.9rem', marginTop: 2 }}>
                       🕐 {r.hora} hs
                       {r.tipo === 'fija' && ' · Turno fijo'}
+                      {r.tipo === 'recuperacion' && ' · Recuperación'}
                     </div>
+                    {!puedeCancelar && r.estado === 'confirmada' && (
+                      <div style={{ fontSize: '0.78rem', color: '#c0392b', marginTop: 4 }}>
+                        ⚠️ Ya no se puede cancelar
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span className={`badge ${r.estado === 'pendiente' ? 'badge-amarillo' : 'badge-verde'}`}>
                       {r.estado === 'pendiente' ? '⏳ Pendiente' : '✓ Confirmado'}
                     </span>
                     {puedeCancelar && (
-                      <button
-                        className="btn btn-ghost"
+                      <button className="btn btn-ghost"
                         style={{ padding: '6px 12px', minHeight: 34, fontSize: '0.85rem' }}
                         onClick={() => cancelar(r.id, r.fecha, r.hora)}
-                        disabled={cancelando === r.id}
-                      >
+                        disabled={cancelando === r.id}>
                         {cancelando === r.id ? '...' : 'Cancelar'}
                       </button>
                     )}
@@ -122,18 +144,15 @@ export default function MisReservas() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {pasadas.slice(0, 10).map(r => (
               <div key={r.id} style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                padding: '10px 14px',
-                background: '#f8f8f6',
-                borderRadius: 8,
-                fontSize: '0.9rem',
-                color: '#5a6b60'
+                display: 'flex', justifyContent: 'space-between',
+                padding: '10px 14px', background: '#f8f8f6', borderRadius: 8, fontSize: '0.9rem', color: '#5a6b60'
               }}>
                 <span style={{ textTransform: 'capitalize' }}>
                   {new Date(r.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })} · {r.hora} hs
                 </span>
-                <span className={`badge ${r.asistio === false ? 'badge-rojo' : 'badge-verde'}`}>{r.asistio === false ? '✗ Faltó' : '✓ Asistida'}</span>
+                <span className={`badge ${r.asistio === false ? 'badge-rojo' : 'badge-verde'}`}>
+                  {r.asistio === false ? '✗ Faltó' : '✓ Asistida'}
+                </span>
               </div>
             ))}
           </div>
