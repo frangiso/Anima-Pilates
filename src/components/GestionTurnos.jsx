@@ -53,7 +53,10 @@ export default function GestionTurnos() {
     setMsg({ tipo: 'exito', texto: `${alumnaNombre} quitada del turno.` })
   }
 
-  useEffect(() => { cargarAlumnas() }, [])
+  useEffect(() => {
+    cargarAlumnas()
+    cargarFeriados()
+  }, [])
   useEffect(() => { cargar() }, [semana])
 
   async function cargarAlumnas() {
@@ -63,17 +66,20 @@ export default function GestionTurnos() {
     setAlumnas(lista)
   }
 
+  async function cargarFeriados() {
+    const snap = await getDocs(collection(db, 'feriados'))
+    setFeriados(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+  }
+
   async function cargar() {
     setCargando(true)
     const fechas = DIAS.map((_, i) => fechaISO(addDays(semana, i)))
-    const [snapRes, snapBloq, snapFer] = await Promise.all([
+    const [snapRes, snapBloq] = await Promise.all([
       getDocs(query(collection(db, 'reservas'), where('fecha', 'in', fechas))),
       getDocs(query(collection(db, 'bloqueados'), where('fecha', 'in', fechas))),
-      getDocs(collection(db, 'feriados'))
     ])
     setReservas(snapRes.docs.map(d => ({ id: d.id, ...d.data() })))
     setBloqueados(snapBloq.docs.map(d => ({ id: d.id, ...d.data() })))
-    setFeriados(snapFer.docs.map(d => ({ id: d.id, ...d.data() })))
     setCargando(false)
   }
 
@@ -222,12 +228,14 @@ export default function GestionTurnos() {
     setMsg({ tipo: 'exito', texto: 'Feriado agregado.' })
     setNuevaFecha('')
     setNuevaDesc('')
+    await cargarFeriados()
     await cargar()
   }
 
   async function eliminarFeriado(id) {
     await deleteDoc(doc(db, 'feriados', id))
     setMsg({ tipo: 'exito', texto: 'Feriado eliminado.' })
+    await cargarFeriados()
     await cargar()
   }
 

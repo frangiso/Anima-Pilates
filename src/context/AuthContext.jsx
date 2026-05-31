@@ -11,18 +11,20 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let cancelado = false
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u)
       if (u) {
         const snap = await getDoc(doc(db, 'usuarios', u.uid))
+        if (cancelado) return
         if (snap.exists()) setPerfil(snap.data())
         else setPerfil(null)
       } else {
-        setPerfil(null)
+        if (!cancelado) setPerfil(null)
       }
-      setLoading(false)
+      if (!cancelado) setLoading(false)
     })
-    return unsub
+    return () => { cancelado = true; unsub() }
   }, [])
 
   return (

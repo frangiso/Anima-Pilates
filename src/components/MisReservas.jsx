@@ -10,7 +10,7 @@ export default function MisReservas() {
   const [cancelando, setCancelando] = useState(null)
   const [msg, setMsg] = useState(null)
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { if (user) cargar() }, [user?.uid])
 
   async function cargar() {
     setCargando(true)

@@ -61,10 +61,9 @@ export default function PanelDashboard() {
       if (yaMarcada === undefined || yaMarcada === null) {
         // Primera vez que se marca (asistió o faltó) → descontar clase
         await descontarClase(alumnaId, false)
-      } else if (yaMarcada !== undefined) {
-        // Ya estaba marcada y se corrige → NO descontar ni devolver
-        // La clase ya fue descontada la primera vez, el cambio asistió↔faltó no afecta el conteo
       }
+      // Si ya estaba marcada y se corrige → NO descontar ni devolver
+      // La clase ya fue descontada la primera vez, el cambio asistió↔faltó no afecta el conteo
     }
 
     setReservasHoy(prev => prev.map(r => r.id === id ? { ...r, asistio, estado: 'confirmada' } : r))

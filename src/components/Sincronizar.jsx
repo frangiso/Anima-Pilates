@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { collection, getDocs, doc, setDoc, query, where } from 'firebase/firestore'
+import { collection, getDocs, doc, writeBatch, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 
 export default function Sincronizar() {
@@ -33,8 +33,10 @@ export default function Sincronizar() {
           const sinCero = tel.startsWith('0') ? tel.slice(1) : tel
           const conCero = '0' + sinCero
 
-          await setDoc(doc(db, 'telefonos', sinCero), { uid: a.id, nombre })
-          await setDoc(doc(db, 'telefonos', conCero), { uid: a.id, nombre })
+          const batch = writeBatch(db)
+          batch.set(doc(db, 'telefonos', sinCero), { uid: a.id, nombre })
+          batch.set(doc(db, 'telefonos', conCero), { uid: a.id, nombre })
+          await batch.commit()
 
           nuevosLogs.push({ tipo: 'ok', msg: `${nombre} — ${tel} ✓` })
           ok++
