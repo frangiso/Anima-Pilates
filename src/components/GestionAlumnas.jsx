@@ -32,7 +32,6 @@ export default function GestionAlumnas() {
   }
 
   async function buscar() {
-    if (!busqueda.trim() && filtro === 'todas') return
     setCargando(true)
     setBuscado(true)
 
