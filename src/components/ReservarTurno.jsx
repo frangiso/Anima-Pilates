@@ -34,7 +34,7 @@ export default function ReservarTurno({ bloqueada }) {
   const [modal, setModal] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState(null)
-  const [tipoReserva, setTipoReserva] = useState('recuperacion')
+  const [tipoReserva, setTipoReserva] = useState('fija')
   const [recuperacionesPorMes, setRecuperacionesPorMes] = useState({})
 
   const horas = getHoras()
