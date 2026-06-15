@@ -129,7 +129,6 @@ export default function GestionAlumnas() {
           onChange={e => setFiltro(e.target.value)}
         >
           <option value="todas">Todas</option>
-          <option value="deuda">Con deuda</option>
           <option value="inactiva">Inactivas</option>
           <option value="sin-plan">Sin plan</option>
         </select>
