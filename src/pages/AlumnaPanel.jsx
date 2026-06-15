@@ -18,7 +18,7 @@ export default function AlumnaPanel() {
     navigate('/')
   }
 
-  const bloqueada = perfil?.deuda || perfil?.estado === 'inactiva'
+  const bloqueada = perfil?.estado === 'inactiva'
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f7f2' }}>
@@ -38,16 +38,10 @@ export default function AlumnaPanel() {
         {/* Aviso de la profe */}
         <AvisoAlumna />
 
-        {/* Alerta de bloqueo */}
+        {/* Alerta de bloqueo solo para cuentas inactivas */}
         {bloqueada && (
           <div className="alert alert-error" style={{ fontSize: '1rem', marginBottom: 20 }}>
             🚫 <strong>Tu cuenta está bloqueada.</strong>{' '}
-            {perfil?.deuda
-              ? 'Tenés una cuota pendiente de pago.'
-              : perfil?.planVencimiento
-              ? `Tu plan venció. Contactá a la profesora para renovarlo.`
-              : 'No tenés un plan activo.'
-            }{' '}
             Escribile a la profesora para continuar.
           </div>
         )}
