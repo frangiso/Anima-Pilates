@@ -46,13 +46,6 @@ export default function AlumnaPanel() {
           </div>
         )}
 
-        {sinClases && (
-          <div className="alert alert-error" style={{ fontSize: '1rem', marginBottom: 20 }}>
-            📋 <strong>No tenés clases disponibles.</strong>{' '}
-            Contactá a la profesora para renovar tu plan.
-          </div>
-        )}
-
         <div className="tabs">
           <button className={`tab ${tab === 'reservar' ? 'active' : ''}`} onClick={() => setTab('reservar')}>
             📅 Reservar
