@@ -24,7 +24,7 @@ function getLunes(fecha) {
 function fechaISO(d) { return d.toISOString().split('T')[0] }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
 
-export default function ReservarTurno({ bloqueada }) {
+export default function ReservarTurno({ bloqueada, sinClases }) {
   const { user, perfil } = useAuth()
   const [semana, setSemana] = useState(getLunes(new Date()))
   const [reservas, setReservas] = useState({})
@@ -174,6 +174,8 @@ export default function ReservarTurno({ bloqueada }) {
 
       {bloqueada ? (
         <div className="alert alert-error">🚫 No podés reservar turnos hasta regularizar tu situación.</div>
+      ) : sinClases ? (
+        <div className="alert alert-error">📋 No tenés clases disponibles. Contactá a la profesora para renovar tu plan.</div>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap', fontSize: '0.85rem' }}>

@@ -19,6 +19,7 @@ export default function AlumnaPanel() {
   }
 
   const bloqueada = perfil?.estado === 'inactiva'
+  const sinClases = !bloqueada && (perfil?.clasesRestantes ?? 0) <= 0
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f7f2' }}>
@@ -38,11 +39,17 @@ export default function AlumnaPanel() {
         {/* Aviso de la profe */}
         <AvisoAlumna />
 
-        {/* Alerta de bloqueo solo para cuentas inactivas */}
         {bloqueada && (
           <div className="alert alert-error" style={{ fontSize: '1rem', marginBottom: 20 }}>
             🚫 <strong>Tu cuenta está bloqueada.</strong>{' '}
             Escribile a la profesora para continuar.
+          </div>
+        )}
+
+        {sinClases && (
+          <div className="alert alert-error" style={{ fontSize: '1rem', marginBottom: 20 }}>
+            📋 <strong>No tenés clases disponibles.</strong>{' '}
+            Contactá a la profesora para renovar tu plan.
           </div>
         )}
 
@@ -59,7 +66,7 @@ export default function AlumnaPanel() {
         </div>
 
         <div style={{ display: tab === 'reservar' ? 'block' : 'none' }}>
-          <ReservarTurno bloqueada={bloqueada} />
+          <ReservarTurno bloqueada={bloqueada} sinClases={sinClases} />
         </div>
         <div style={{ display: tab === 'mis-reservas' ? 'block' : 'none' }}>
           <MisReservas />
