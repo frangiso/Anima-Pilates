@@ -54,11 +54,13 @@ export default function MisReservas() {
           updates.clasesUsadas = Math.max(0, (alumna.clasesUsadas || 0) - 1)
         }
 
-        // Si era turno fijo y es un mes nuevo, dar 2 slots de recuperación para este mes
+        // Si era turno fijo, sumar 1 slot de recuperación (máx 2 por mes)
         if (reserva.tipo === 'fija') {
           const mesActual = new Date().toISOString().substring(0, 7)
-          if (alumna.recuperacionesMes !== mesActual) {
-            updates.recuperacionesDisponibles = 2
+          const mismoMes = alumna.recuperacionesMes === mesActual
+          const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
+          if (slotsActuales < 2) {
+            updates.recuperacionesDisponibles = slotsActuales + 1
             updates.recuperacionesMes = mesActual
           }
         }
@@ -71,11 +73,8 @@ export default function MisReservas() {
       }
     }
 
-    const ganoSlots = reserva?.tipo === 'fija' && reserva?.estado === 'confirmada'
     setMsg({ tipo: 'exito', texto: reserva?.estado === 'confirmada'
-      ? ganoSlots
-        ? 'Turno cancelado. Tu clase fue devuelta y tenés 2 recuperaciones disponibles este mes.'
-        : 'Turno cancelado. Tu clase fue devuelta.'
+      ? 'Turno cancelado. Tu clase fue devuelta.'
       : 'Turno cancelado correctamente.'
     })
     await cargar()
