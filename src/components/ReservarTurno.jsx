@@ -174,8 +174,6 @@ export default function ReservarTurno({ bloqueada, sinClases }) {
 
       {bloqueada ? (
         <div className="alert alert-error">🚫 No podés reservar turnos hasta regularizar tu situación.</div>
-      ) : sinClases ? (
-        <div className="alert alert-error">📋 No tenés clases disponibles. Contactá a la profesora para renovar tu plan.</div>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap', fontSize: '0.85rem' }}>
@@ -238,7 +236,7 @@ export default function ReservarTurno({ bloqueada, sinClases }) {
                     )
                     return (
                       <div key={celda.key} className="turno-cell turno-libre"
-                        onClick={() => setModal(celda)}>
+                        onClick={() => { if (sinClases) setTipoReserva('recuperacion'); setModal(celda) }}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{celda.cuposLibres}</span>
                         <span style={{ fontSize: '0.7rem' }}>lugar{celda.cuposLibres !== 1 ? 'es' : ''}</span>
                       </div>
@@ -259,11 +257,17 @@ export default function ReservarTurno({ bloqueada, sinClases }) {
               📅 {new Date(modal.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}<br />
               🕐 {modal.hora} hs
             </p>
+            {sinClases && (
+              <div className="alert alert-info" style={{ fontSize: '0.88rem', marginBottom: 12 }}>
+                📋 Usaste todas las clases de tu plan. Solo podés reservar clases de recuperación (máx. 2 por mes).
+              </div>
+            )}
+
             <div className="input-group">
               <label>Tipo de reserva</label>
               <select value={tipoReserva} onChange={e => setTipoReserva(e.target.value)}>
                 <option value="recuperacion">Clase de recuperación (máx. 2 por mes)</option>
-                <option value="fija">Turno fijo semanal (necesita aprobación)</option>
+                {!sinClases && <option value="fija">Turno fijo semanal (necesita aprobación)</option>}
               </select>
             </div>
 
