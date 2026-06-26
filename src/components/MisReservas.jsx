@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, updateDoc, getDoc, increment } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 
@@ -31,14 +31,22 @@ export default function MisReservas() {
     const hs = hora ? hora.split(':')[0] : '12'
     const fechaTurno = new Date(fecha + 'T' + hs.padStart(2,'0') + ':00:00')
     const diffHs = (fechaTurno - hoy) / (1000 * 60 * 60)
+    const reserva = reservas.find(r => r.id === id)
+
     if (diffHs < 2) {
-      setMsg({ tipo: 'error', texto: 'No podés cancelar con menos de 2 horas de anticipación. La clase se da por perdida.' })
+      setCancelando(id)
+      await updateDoc(doc(db, 'reservas', id), { estado: 'cancelada' })
+      if (reserva?.estado === 'confirmada') {
+        await updateDoc(doc(db, 'usuarios', user.uid), { recuperacionesDisponibles: increment(1) })
+        setMsg({ tipo: 'info', texto: 'Turno cancelado. La clase se perdió, pero ganaste 1 clase de recuperación que podés usar cuando quieras.' })
+      } else {
+        setMsg({ tipo: 'exito', texto: 'Turno cancelado correctamente.' })
+      }
+      await cargar()
+      setCancelando(null)
       return
     }
     setCancelando(id)
-
-    // Buscar la reserva para saber el estado
-    const reserva = reservas.find(r => r.id === id)
     await updateDoc(doc(db, 'reservas', id), { estado: 'cancelada' })
 
     // Solo devolver clase si el turno estaba CONFIRMADO (ya se había descontado al aprobar)

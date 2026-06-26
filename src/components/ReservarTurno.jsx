@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, increment, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 
@@ -24,7 +24,7 @@ function getLunes(fecha) {
 function fechaISO(d) { return d.toISOString().split('T')[0] }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
 
-export default function ReservarTurno({ bloqueada, sinClases }) {
+export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion }) {
   const { user, perfil } = useAuth()
   const [semana, setSemana] = useState(getLunes(new Date()))
   const [reservas, setReservas] = useState({})
@@ -35,7 +35,6 @@ export default function ReservarTurno({ bloqueada, sinClases }) {
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState(null)
   const [tipoReserva, setTipoReserva] = useState('fija')
-  const [recuperacionesPorMes, setRecuperacionesPorMes] = useState({})
 
   const horas = getHoras()
   const feriadosCargados = useRef(false)
@@ -46,24 +45,6 @@ export default function ReservarTurno({ bloqueada, sinClases }) {
     feriadosCargados.current = true
     getDocs(collection(db, 'feriados'))
       .then(snap => setFeriados(snap.docs.map(d => d.data().fecha)))
-  }, [])
-
-  // Carga recuperaciones una sola vez al montar (no depende de la semana)
-  useEffect(() => {
-    if (!user) return
-    getDocs(query(
-      collection(db, 'reservas'),
-      where('alumnaId', '==', user.uid),
-      where('tipo', '==', 'recuperacion'),
-      where('estado', 'in', ['confirmada', 'pendiente'])
-    )).then(snap => {
-      const conteo = {}
-      snap.docs.forEach(d => {
-        const mes = (d.data().fecha || '').substring(0, 7)
-        if (mes) conteo[mes] = (conteo[mes] || 0) + 1
-      })
-      setRecuperacionesPorMes(conteo)
-    })
   }, [])
 
   useEffect(() => { cargarSemana() }, [semana])
@@ -119,22 +100,22 @@ export default function ReservarTurno({ bloqueada, sinClases }) {
         fecha: modal.fecha,
         hora: modal.hora,
         tipo: tipoReserva,
+        usaSlotRecuperacion: tipoReserva === 'recuperacion',
         estado: (tipoReserva === 'fija' || tipoReserva === 'recuperacion') ? 'pendiente' : 'confirmada',
         creadoEn: serverTimestamp()
       })
+      if (tipoReserva === 'recuperacion') {
+        await updateDoc(doc(db, 'usuarios', user.uid), { recuperacionesDisponibles: increment(-1) })
+      }
       await addDoc(collection(db, 'notificaciones'), {
         tipo: tipoReserva === 'fija' ? 'turno_fijo_solicitado' : 'nueva_reserva',
-        titulo: tipoReserva === 'fija' ? 'Solicitud de turno fijo' : tipoReserva === 'recuperacion' ? 'Clase de recuperación' : 'Nueva reserva',
+        titulo: tipoReserva === 'fija' ? 'Solicitud de turno fijo' : 'Clase de recuperación',
         mensaje: `${perfil.nombre} ${perfil.apellido} reservó el ${modal.fecha} a las ${modal.hora}hs.`,
         leida: false,
         creadoEn: serverTimestamp(),
         datos: { alumnaId: user.uid, fecha: modal.fecha, hora: modal.hora }
       })
-      setMsg({ tipo: 'exito', texto: (tipoReserva === 'fija' || tipoReserva === 'recuperacion') ? '¡Solicitud enviada! La profesora la confirmará pronto.' : '¡Turno reservado con éxito!' })
-      if (tipoReserva === 'recuperacion') {
-        const mes = modal.fecha.substring(0, 7)
-        setRecuperacionesPorMes(prev => ({ ...prev, [mes]: (prev[mes] || 0) + 1 }))
-      }
+      setMsg({ tipo: 'exito', texto: '¡Solicitud enviada! La profesora la confirmará pronto.' })
       setModal(null)
       await cargarSemana()
     } catch {
@@ -236,7 +217,12 @@ export default function ReservarTurno({ bloqueada, sinClases }) {
                     )
                     return (
                       <div key={celda.key} className="turno-cell turno-libre"
-                        onClick={() => { if (sinClases) setTipoReserva('recuperacion'); setModal(celda) }}>
+                        onClick={() => {
+                          if (sinClases && !tieneRecuperacion) return
+                          setTipoReserva(sinClases ? 'recuperacion' : 'fija')
+                          setModal(celda)
+                        }}
+                        style={sinClases && !tieneRecuperacion ? { cursor: 'not-allowed', opacity: 0.5 } : {}}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{celda.cuposLibres}</span>
                         <span style={{ fontSize: '0.7rem' }}>lugar{celda.cuposLibres !== 1 ? 'es' : ''}</span>
                       </div>
@@ -257,33 +243,19 @@ export default function ReservarTurno({ bloqueada, sinClases }) {
               📅 {new Date(modal.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}<br />
               🕐 {modal.hora} hs
             </p>
-            {sinClases && (
+            {tieneRecuperacion && (
               <div className="alert alert-info" style={{ fontSize: '0.88rem', marginBottom: 12 }}>
-                📋 Usaste todas las clases de tu plan. Solo podés reservar clases de recuperación (máx. 2 por mes).
+                🔄 Tenés {perfil?.recuperacionesDisponibles} clase{perfil?.recuperacionesDisponibles !== 1 ? 's' : ''} de recuperación disponible{perfil?.recuperacionesDisponibles !== 1 ? 's' : ''}.
               </div>
             )}
 
             <div className="input-group">
               <label>Tipo de reserva</label>
               <select value={tipoReserva} onChange={e => setTipoReserva(e.target.value)}>
-                <option value="recuperacion">Clase de recuperación (máx. 2 por mes)</option>
+                {tieneRecuperacion && <option value="recuperacion">Clase de recuperación (necesita aprobación)</option>}
                 {!sinClases && <option value="fija">Turno fijo semanal (necesita aprobación)</option>}
               </select>
             </div>
-
-            {tipoReserva === 'recuperacion' && (() => {
-              const mesTurno = modal?.fecha?.substring(0, 7) || ''
-              const usadasEseMes = recuperacionesPorMes[mesTurno] || 0
-              const mesNombre = mesTurno ? new Date(mesTurno + '-15').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }) : ''
-              return (
-                <div className={`alert ${usadasEseMes >= 2 ? 'alert-error' : 'alert-info'}`} style={{ fontSize: '0.88rem' }}>
-                  {usadasEseMes >= 2
-                    ? `🚫 Ya usaste tus 2 clases de recuperación de ${mesNombre}. No podés reservar más ese mes.`
-                    : `💡 Usaste ${usadasEseMes} de 2 recuperaciones disponibles en ${mesNombre}.`
-                  }
-                </div>
-              )
-            })()}
 
             {tipoReserva === 'fija' && (
               <div className="alert alert-info" style={{ fontSize: '0.88rem' }}>
@@ -293,7 +265,7 @@ export default function ReservarTurno({ bloqueada, sinClases }) {
 
             <div className="modal-actions">
               <button className="btn btn-primary" onClick={confirmarReserva}
-                disabled={guardando || (tipoReserva === 'recuperacion' && (recuperacionesPorMes[modal?.fecha?.substring(0,7)] || 0) >= 2)}
+                disabled={guardando}
                 style={{ flex: 1 }}>
                 {guardando ? 'Guardando...' : 'Confirmar'}
               </button>

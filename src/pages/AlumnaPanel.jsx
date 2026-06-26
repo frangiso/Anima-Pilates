@@ -20,6 +20,7 @@ export default function AlumnaPanel() {
 
   const bloqueada = perfil?.estado === 'inactiva'
   const sinClases = !bloqueada && (perfil?.clasesRestantes ?? 0) <= 0
+  const tieneRecuperacion = (perfil?.recuperacionesDisponibles ?? 0) > 0
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f7f2' }}>
@@ -59,7 +60,7 @@ export default function AlumnaPanel() {
         </div>
 
         <div style={{ display: tab === 'reservar' ? 'block' : 'none' }}>
-          <ReservarTurno bloqueada={bloqueada} sinClases={sinClases} />
+          <ReservarTurno bloqueada={bloqueada} sinClases={sinClases} tieneRecuperacion={tieneRecuperacion} />
         </div>
         <div style={{ display: tab === 'mis-reservas' ? 'block' : 'none' }}>
           <MisReservas />

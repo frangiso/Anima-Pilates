@@ -84,11 +84,13 @@ export default function GestionTurnos() {
   }
 
   async function aprobar(id, alumnaId, fecha, hora, alumnaNombre) {
+    const reservaSnap = await getDoc(doc(db, 'reservas', id))
+    const reservaData = reservaSnap.data()
     await updateDoc(doc(db, 'reservas', id), { estado: 'confirmada' })
     const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
 
-    // Descontar 1 clase al aprobar
-    if (alumnaId) {
+    // Descontar 1 clase al aprobar (no descontar si es clase de recuperación por cancelación tardía)
+    if (alumnaId && !reservaData?.usaSlotRecuperacion) {
       const alumnaSnap = await getDoc(doc(db, 'usuarios', alumnaId))
       if (alumnaSnap.exists()) {
         const alumna = alumnaSnap.data()
