@@ -245,7 +245,7 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
             </p>
             {tieneRecuperacion && (
               <div className="alert alert-info" style={{ fontSize: '0.88rem', marginBottom: 12 }}>
-                🔄 Tenés {perfil?.recuperacionesDisponibles} clase{perfil?.recuperacionesDisponibles !== 1 ? 's' : ''} de recuperación disponible{perfil?.recuperacionesDisponibles !== 1 ? 's' : ''}.
+                🔄 Tenés {perfil?.recuperacionesDisponibles} de 2 recuperaciones disponibles este mes.
               </div>
             )}
 

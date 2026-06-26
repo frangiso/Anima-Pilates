@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, doc, updateDoc, getDoc, increment } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 
@@ -34,42 +34,50 @@ export default function MisReservas() {
     const reserva = reservas.find(r => r.id === id)
 
     if (diffHs < 2) {
-      setCancelando(id)
-      await updateDoc(doc(db, 'reservas', id), { estado: 'cancelada' })
-      if (reserva?.estado === 'confirmada') {
-        await updateDoc(doc(db, 'usuarios', user.uid), { recuperacionesDisponibles: increment(1) })
-        setMsg({ tipo: 'info', texto: 'Turno cancelado. La clase se perdió, pero ganaste 1 clase de recuperación que podés usar cuando quieras.' })
-      } else {
-        setMsg({ tipo: 'exito', texto: 'Turno cancelado correctamente.' })
-      }
-      await cargar()
-      setCancelando(null)
+      setMsg({ tipo: 'error', texto: 'No podés cancelar con menos de 2 horas de anticipación. La clase se da por perdida.' })
       return
     }
+
     setCancelando(id)
     await updateDoc(doc(db, 'reservas', id), { estado: 'cancelada' })
 
-    // Solo devolver clase si el turno estaba CONFIRMADO (ya se había descontado al aprobar)
+    // Solo actuar si el turno estaba CONFIRMADO (la clase ya había sido descontada al aprobar)
     if (reserva?.estado === 'confirmada' && reserva?.alumnaId) {
       const alumnaSnap = await getDoc(doc(db, 'usuarios', reserva.alumnaId))
       if (alumnaSnap.exists()) {
         const alumna = alumnaSnap.data()
         const clases = alumna.clasesRestantes ?? null
+        const updates = {}
+
         if (clases !== null && clases !== undefined) {
-          const nuevasClases = clases + 1
-          await updateDoc(doc(db, 'usuarios', reserva.alumnaId), {
-            clasesRestantes: nuevasClases,
-            clasesUsadas: Math.max(0, (alumna.clasesUsadas || 0) - 1)
-          })
-          // Si tenía deuda por quedarse sin clases, quitarla
-          if (alumna.deuda && clases === 0) {
-            await updateDoc(doc(db, 'usuarios', reserva.alumnaId), { deuda: false })
+          updates.clasesRestantes = clases + 1
+          updates.clasesUsadas = Math.max(0, (alumna.clasesUsadas || 0) - 1)
+        }
+
+        // Si era turno fijo y es un mes nuevo, dar 2 slots de recuperación para este mes
+        if (reserva.tipo === 'fija') {
+          const mesActual = new Date().toISOString().substring(0, 7)
+          if (alumna.recuperacionesMes !== mesActual) {
+            updates.recuperacionesDisponibles = 2
+            updates.recuperacionesMes = mesActual
           }
+        }
+
+        await updateDoc(doc(db, 'usuarios', reserva.alumnaId), updates)
+
+        if (alumna.deuda && clases === 0) {
+          await updateDoc(doc(db, 'usuarios', reserva.alumnaId), { deuda: false })
         }
       }
     }
 
-    setMsg({ tipo: 'exito', texto: reserva?.estado === 'confirmada' ? 'Turno cancelado. Tu clase fue devuelta.' : 'Turno cancelado correctamente.' })
+    const ganoSlots = reserva?.tipo === 'fija' && reserva?.estado === 'confirmada'
+    setMsg({ tipo: 'exito', texto: reserva?.estado === 'confirmada'
+      ? ganoSlots
+        ? 'Turno cancelado. Tu clase fue devuelta y tenés 2 recuperaciones disponibles este mes.'
+        : 'Turno cancelado. Tu clase fue devuelta.'
+      : 'Turno cancelado correctamente.'
+    })
     await cargar()
     setCancelando(null)
   }
