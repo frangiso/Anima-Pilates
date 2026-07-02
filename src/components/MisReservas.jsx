@@ -65,11 +65,8 @@ export default function MisReservas() {
           }
         }
 
+        if (alumna.deuda && clases === 0) updates.deuda = false
         await updateDoc(doc(db, 'usuarios', reserva.alumnaId), updates)
-
-        if (alumna.deuda && clases === 0) {
-          await updateDoc(doc(db, 'usuarios', reserva.alumnaId), { deuda: false })
-        }
       }
     }
 
