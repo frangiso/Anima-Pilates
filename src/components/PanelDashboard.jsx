@@ -19,21 +19,29 @@ export default function PanelDashboard() {
     setCargando(true)
     const diaKey = DIA_KEYS[new Date().getDay() - 1] // undefined on weekends
 
-    const [snapRes, snapAlumnas] = await Promise.all([
+    const [snapRes, snapAlumnas, snapCanceladas] = await Promise.all([
       getDocs(query(
         collection(db, 'reservas'),
         where('fecha', '==', hoy),
         where('estado', 'in', ['confirmada', 'pendiente'])
       )),
-      getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
+      getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna'))),
+      getDocs(query(
+        collection(db, 'reservas'),
+        where('fecha', '==', hoy),
+        where('estado', '==', 'cancelada')
+      ))
     ])
 
     const reales = snapRes.docs.map(d => ({ id: d.id, ...d.data() }))
+    // Set of alumnaId_hora that cancelled today — skip them from virtual entries
+    const canceladasHoy = new Set(
+      snapCanceladas.docs.map(d => `${d.data().alumnaId}_${d.data().hora}`)
+    )
 
     // Add virtual turnosFijo entries for students without a reservation doc today
     const virtuales = []
     if (diaKey) {
-      const alumnaIdsConDoc = new Set(reales.map(r => r.alumnaId).filter(Boolean))
       for (const aDoc of snapAlumnas.docs) {
         const a = { id: aDoc.id, ...aDoc.data() }
         if (a.estado === 'inactiva') continue
@@ -42,6 +50,8 @@ export default function PanelDashboard() {
           // Skip if this alumna already has a real reservation for this hour
           const yaEnHora = reales.some(r => r.alumnaId === a.id && r.hora === t.hora)
           if (yaEnHora) continue
+          // Skip if she cancelled today's class
+          if (canceladasHoy.has(`${a.id}_${t.hora}`)) continue
           virtuales.push({
             id: `v_${a.id}_${t.hora}`,
             virtual: true,
