@@ -30,6 +30,7 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
   const [semana, setSemana] = useState(getLunes(new Date()))
   const [reservas, setReservas] = useState({})
   const [misReservas, setMisReservas] = useState({})
+  const [misCanceladas, setMisCanceladas] = useState(new Set())
   const [feriados, setFeriados] = useState([])
   const [cargando, setCargando] = useState(true)
   const [modal, setModal] = useState(null)
@@ -61,20 +62,25 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
   async function cargarSemana() {
     setCargando(true)
     const fechas = DIAS.map((_, i) => fechaISO(addDays(semana, i)))
-    const snapRes = await getDocs(query(collection(db, 'reservas'),
-      where('fecha', 'in', fechas),
-      where('estado', 'in', ['confirmada', 'pendiente'])
-    ))
+    // Cargamos TODOS los docs (incluyendo cancelados) para saber si alguien ya tiene doc para esa fecha
+    const snapRes = await getDocs(query(collection(db, 'reservas'), where('fecha', 'in', fechas)))
     const mapa = {}
     const mias = {}
-    const alumnaDocKeys = new Set() // alumnaId_fecha_hora para evitar doble conteo
+    const alumnaDocKeys = new Set() // alumnaId_fecha_hora (todos los estados, para no contar virtuales si hay doc)
+    const canceladasPropias = new Set() // fecha_hora donde la alumna actual canceló su turno fijo
+
     snapRes.forEach(d => {
       const r = d.data()
       const key = `${r.fecha}_${r.hora}`
+      if (r.alumnaId) alumnaDocKeys.add(`${r.alumnaId}_${r.fecha}_${r.hora}`)
+      if (r.estado === 'cancelada') {
+        if (r.alumnaId === user.uid) canceladasPropias.add(key)
+        return // canceladas no cuentan para el cupo
+      }
       mapa[key] = (mapa[key] || 0) + 1
       if (r.alumnaId === user.uid) mias[key] = { id: d.id, ...r }
-      if (r.alumnaId) alumnaDocKeys.add(`${r.alumnaId}_${r.fecha}_${r.hora}`)
     })
+
     // Contar slots virtuales de turnosFijos para que se descuenten del cupo
     for (const a of (alumnasFijosRef.current || [])) {
       if (a.estado === 'inactiva') continue
@@ -90,6 +96,7 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
     }
     setReservas(mapa)
     setMisReservas(mias)
+    setMisCanceladas(canceladasPropias)
     setCargando(false)
   }
 
@@ -108,7 +115,8 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
     const esTurnoFijo = (perfil?.turnosFijos || []).some(t => t.dia === DIA_KEYS[diaIdx] && t.hora === hora)
     if (esFeriado) return { estado: 'feriado', key, fecha, hora }
     if (esBloqueadoFijo(diaIdx, hora)) return { estado: 'no-disponible', key, fecha, hora }
-    if (esTurnoFijo) return { estado: 'mia-fija', key, fecha, hora }
+    // Solo mostrar como "mia-fija" si no canceló específicamente esta fecha
+    if (esTurnoFijo && !misCanceladas.has(key)) return { estado: 'mia-fija', key, fecha, hora }
     if (mia) return { estado: 'mia', key, fecha, hora, reservaId: mia.id, estadoReserva: mia.estado }
     if (ocupados >= CUPOS_MAX) return { estado: 'lleno', key, fecha, hora }
     return { estado: 'libre', key, fecha, hora, cuposLibres: CUPOS_MAX - ocupados }

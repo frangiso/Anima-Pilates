@@ -390,7 +390,7 @@ export default function GestionTurnos() {
                     const hayPendiente = resHora.some(r => r.estado === 'pendiente')
                     const fijosHora = alumnas.filter(a =>
                       (a.turnosFijos || []).some(t => t.dia === DIA_KEYS[di] && t.hora === hora) &&
-                      !resHora.some(r => r.alumnaId === a.id)
+                      !reservas.some(r => r.alumnaId === a.id && r.fecha === fecha && r.hora === hora)
                     )
                     const total = resHora.length + fijosHora.length
                     const lleno = total >= CUPOS_MAX
