@@ -53,18 +53,37 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
   async function cargarSemana() {
     setCargando(true)
     const fechas = DIAS.map((_, i) => fechaISO(addDays(semana, i)))
-    const snapRes = await getDocs(query(collection(db, 'reservas'),
-      where('fecha', 'in', fechas),
-      where('estado', 'in', ['confirmada', 'pendiente'])
-    ))
+    const [snapRes, snapAlumnas] = await Promise.all([
+      getDocs(query(collection(db, 'reservas'),
+        where('fecha', 'in', fechas),
+        where('estado', 'in', ['confirmada', 'pendiente'])
+      )),
+      getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
+    ])
     const mapa = {}
     const mias = {}
+    const alumnaDocKeys = new Set() // alumnaId_fecha_hora para evitar doble conteo
     snapRes.forEach(d => {
       const r = d.data()
       const key = `${r.fecha}_${r.hora}`
       mapa[key] = (mapa[key] || 0) + 1
       if (r.alumnaId === user.uid) mias[key] = { id: d.id, ...r }
+      if (r.alumnaId) alumnaDocKeys.add(`${r.alumnaId}_${r.fecha}_${r.hora}`)
     })
+    // Contar slots virtuales de turnosFijos para que se descuenten del cupo
+    for (const aDoc of snapAlumnas.docs) {
+      const a = aDoc.data()
+      if (a.estado === 'inactiva') continue
+      for (const t of (a.turnosFijos || [])) {
+        const diaIdx = DIA_KEYS.indexOf(t.dia)
+        if (diaIdx === -1) continue
+        const fecha = fechaISO(addDays(semana, diaIdx))
+        if (!alumnaDocKeys.has(`${aDoc.id}_${fecha}_${t.hora}`)) {
+          const key = `${fecha}_${t.hora}`
+          mapa[key] = (mapa[key] || 0) + 1
+        }
+      }
+    }
     setReservas(mapa)
     setMisReservas(mias)
     setCargando(false)

@@ -34,23 +34,30 @@ export default function MisReservas() {
 
   async function cargar() {
     setCargando(true)
-    const snap = await getDocs(query(
-      collection(db, 'reservas'),
-      where('alumnaId', '==', user.uid),
-      where('estado', 'in', ['confirmada', 'pendiente'])
-    ))
-    const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    lista.sort((a, b) => a.fecha.localeCompare(b.fecha))
-    setReservas(lista)
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'reservas'),
+        where('alumnaId', '==', user.uid),
+        where('estado', 'in', ['confirmada', 'pendiente'])
+      ))
+      const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      lista.sort((a, b) => a.fecha.localeCompare(b.fecha))
+      setReservas(lista)
 
-    // Fetch cancelled fija docs to know which virtual occurrences were already cancelled
-    const canceladasSnap = await getDocs(query(
-      collection(db, 'reservas'),
-      where('alumnaId', '==', user.uid),
-      where('estado', '==', 'cancelada'),
-      where('tipo', '==', 'fija')
-    ))
-    setCanceladasFijas(new Set(canceladasSnap.docs.map(d => `${d.data().fecha}_${d.data().hora}`)))
+      // Two-field query (avoids composite index requirement); filter tipo client-side
+      const canceladasSnap = await getDocs(query(
+        collection(db, 'reservas'),
+        where('alumnaId', '==', user.uid),
+        where('estado', '==', 'cancelada')
+      ))
+      setCanceladasFijas(new Set(
+        canceladasSnap.docs
+          .filter(d => d.data().tipo === 'fija')
+          .map(d => `${d.data().fecha}_${d.data().hora}`)
+      ))
+    } catch (err) {
+      console.error('Error cargando reservas:', err)
+    }
     setCargando(false)
   }
 
