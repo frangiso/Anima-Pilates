@@ -47,7 +47,22 @@ export default function GestionTurnos() {
 
   async function quitarDeTurnoGrilla(reservaId, alumnaNombre) {
     if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
-    await deleteDoc(doc(db, 'reservas', reservaId))
+    const reservaSnap = await getDoc(doc(db, 'reservas', reservaId))
+    const reservaData = reservaSnap.data()
+    await updateDoc(doc(db, 'reservas', reservaId), { estado: 'cancelada' })
+    if (reservaData?.estado === 'confirmada' && reservaData?.alumnaId && !reservaData?.usaSlotRecuperacion) {
+      const alumnaSnap = await getDoc(doc(db, 'usuarios', reservaData.alumnaId))
+      if (alumnaSnap.exists()) {
+        const alumna = alumnaSnap.data()
+        const clases = alumna.clasesRestantes ?? null
+        if (clases !== null) {
+          await updateDoc(doc(db, 'usuarios', reservaData.alumnaId), {
+            clasesRestantes: clases + 1,
+            clasesUsadas: Math.max(0, (alumna.clasesUsadas || 0) - 1)
+          })
+        }
+      }
+    }
     await cargar()
     setModalDetalle(null)
     setMsg({ tipo: 'exito', texto: `${alumnaNombre} quitada del turno.` })
@@ -201,11 +216,16 @@ export default function GestionTurnos() {
           creadoEn: serverTimestamp()
         })
         if (tipoReserva === 'fija') {
-          const diaStr = new Date(modalReserva.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long' })
-          const turnoActual = alumna.turnoFijo ? alumna.turnoFijo + ' · ' : ''
-          await updateDoc(doc(db, 'usuarios', alumna.id), {
-            turnoFijo: turnoActual + `${diaStr} ${modalReserva.hora}hs`
-          })
+          const diaSemana = new Date(modalReserva.fecha + 'T12:00').getDay()
+          const DIA_KEYS = ['lun', 'mar', 'mie', 'jue', 'vie']
+          const diaKey = DIA_KEYS[diaSemana - 1]
+          const turnosFijosActuales = alumna.turnosFijos || []
+          const yaExiste = turnosFijosActuales.some(t => t.dia === diaKey && t.hora === modalReserva.hora)
+          if (!yaExiste) {
+            await updateDoc(doc(db, 'usuarios', alumna.id), {
+              turnosFijos: [...turnosFijosActuales, { dia: diaKey, hora: modalReserva.hora }]
+            })
+          }
         }
         setMsg({ tipo: 'exito', texto: `Turno reservado para ${alumna.nombre} ${alumna.apellido}.` })
       }

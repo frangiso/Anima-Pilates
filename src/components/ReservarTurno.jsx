@@ -4,6 +4,7 @@ import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
+const DIA_KEYS = ['lun', 'mar', 'mie', 'jue', 'vie']
 const CUPOS_MAX = 5
 
 function getHoras() {
@@ -81,8 +82,10 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
     const ocupados = reservas[key] || 0
     const mia = misReservas[key]
     const esFeriado = feriados.includes(fecha)
+    const esTurnoFijo = (perfil?.turnosFijos || []).some(t => t.dia === DIA_KEYS[diaIdx] && t.hora === hora)
     if (esFeriado) return { estado: 'feriado', key, fecha, hora }
     if (esBloqueadoFijo(diaIdx, hora)) return { estado: 'no-disponible', key, fecha, hora }
+    if (esTurnoFijo) return { estado: 'mia-fija', key, fecha, hora }
     if (mia) return { estado: 'mia', key, fecha, hora, reservaId: mia.id, estadoReserva: mia.estado }
     if (ocupados >= CUPOS_MAX) return { estado: 'lleno', key, fecha, hora }
     return { estado: 'libre', key, fecha, hora, cuposLibres: CUPOS_MAX - ocupados }
@@ -129,6 +132,7 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
   const hoy = fechaISO(new Date())
   const lunes = fechaISO(semana)
   const semanaAnteriorHabilitada = lunes > hoy
+  const tieneTurnosFijos = (perfil?.turnosFijos || []).length > 0
 
   return (
     <div>
@@ -202,6 +206,12 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
                       <div key={`${di}_${hora}`} className="turno-cell turno-bloqueado"
                         style={{ background: celda.estado === 'feriado' ? '#fde8e8' : undefined }} />
                     )
+                    if (celda.estado === 'mia-fija') return (
+                      <div key={celda.key} className="turno-cell turno-reservado">
+                        <span style={{ fontSize: '0.9rem' }}>📌</span>
+                        <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>Tuyo</span>
+                      </div>
+                    )
                     if (celda.estado === 'mia') return (
                       <div key={celda.key} className="turno-cell turno-reservado">
                         <span style={{ fontSize: '0.9rem' }}>✓</span>
@@ -215,14 +225,18 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
                         <span style={{ fontSize: '0.8rem' }}>Lleno</span>
                       </div>
                     )
+                    // Libre cell: students with fixed schedule can only book recovery classes
+                    const puedeSolicitarLibre = tieneTurnosFijos
+                      ? tieneRecuperacion
+                      : (!sinClases || tieneRecuperacion)
                     return (
                       <div key={celda.key} className="turno-cell turno-libre"
                         onClick={() => {
-                          if (sinClases && !tieneRecuperacion) return
-                          setTipoReserva(sinClases ? 'recuperacion' : 'fija')
+                          if (!puedeSolicitarLibre) return
+                          setTipoReserva(tieneTurnosFijos ? 'recuperacion' : (sinClases ? 'recuperacion' : 'fija'))
                           setModal(celda)
                         }}
-                        style={sinClases && !tieneRecuperacion ? { cursor: 'not-allowed', opacity: 0.5 } : {}}>
+                        style={!puedeSolicitarLibre ? { cursor: 'not-allowed', opacity: 0.5 } : {}}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{celda.cuposLibres}</span>
                         <span style={{ fontSize: '0.7rem' }}>lugar{celda.cuposLibres !== 1 ? 'es' : ''}</span>
                       </div>
@@ -253,7 +267,7 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
               <label>Tipo de reserva</label>
               <select value={tipoReserva} onChange={e => setTipoReserva(e.target.value)}>
                 {tieneRecuperacion && <option value="recuperacion">Clase de recuperación (necesita aprobación)</option>}
-                {!sinClases && <option value="fija">Turno fijo semanal (necesita aprobación)</option>}
+                {!sinClases && !tieneTurnosFijos && <option value="fija">Turno fijo semanal (necesita aprobación)</option>}
               </select>
             </div>
 

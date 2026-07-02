@@ -4,6 +4,15 @@ import { db } from '../firebase'
 
 const PLANES = ['Plan mensual — 2 veces/semana', 'Plan mensual — 3 veces/semana', 'Plan mensual — libre', 'Pack 8 clases', 'Pack 12 clases', 'Clase suelta']
 
+const DIAS_FIJOS = [
+  { key: 'lun', label: 'Lunes' },
+  { key: 'mar', label: 'Martes' },
+  { key: 'mie', label: 'Miércoles' },
+  { key: 'jue', label: 'Jueves' },
+  { key: 'vie', label: 'Viernes' },
+]
+const HORAS_FIJAS = Array.from({ length: 13 }, (_, i) => `${(8 + i).toString().padStart(2, '0')}:00`)
+
 export default function GestionAlumnas() {
   const [alumnas, setAlumnas] = useState([])
   const [busqueda, setBusqueda] = useState('')
@@ -15,6 +24,8 @@ export default function GestionAlumnas() {
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState(null)
   const [filtro, setFiltro] = useState('todas')
+  const [diaSlot, setDiaSlot] = useState('lun')
+  const [horaSlot, setHoraSlot] = useState('08:00')
 
   function aplicarFiltro(lista, textoBusqueda, filtroActual) {
     const resultado = lista.filter(a => {
@@ -43,6 +54,8 @@ export default function GestionAlumnas() {
 
   function abrirEdicion(alumna) {
     setEditando(alumna.id)
+    setDiaSlot('lun')
+    setHoraSlot('08:00')
     setForm({
       plan: alumna.plan || '',
       clasesRestantes: alumna.clasesRestantes || 0,
@@ -51,9 +64,15 @@ export default function GestionAlumnas() {
         : '',
       deuda: alumna.deuda || false,
       estado: alumna.estado || 'activa',
-      turnoFijo: alumna.turnoFijo || '',
+      turnosFijos: alumna.turnosFijos || [],
       notas: alumna.notas || ''
     })
+  }
+
+  function agregarSlot() {
+    const yaExiste = (form.turnosFijos || []).some(t => t.dia === diaSlot && t.hora === horaSlot)
+    if (yaExiste) return
+    setForm(f => ({ ...f, turnosFijos: [...(f.turnosFijos || []), { dia: diaSlot, hora: horaSlot }] }))
   }
 
   async function guardar() {
@@ -63,7 +82,7 @@ export default function GestionAlumnas() {
       clasesRestantes: parseInt(form.clasesRestantes) || 0,
       deuda: form.deuda,
       estado: form.estado,
-      turnoFijo: form.turnoFijo,
+      turnosFijos: form.turnosFijos || [],
       notas: form.notas,
     }
     if (form.planVencimiento) {
@@ -183,9 +202,15 @@ export default function GestionAlumnas() {
                       {a.clasesRestantes > 0 && (
                         <div style={{ fontSize: '0.78rem', color: '#4a7c59' }}>{a.clasesRestantes} clases restantes</div>
                       )}
-                      {a.turnoFijo && (
+                      {(a.turnosFijos?.length > 0) ? (
+                        a.turnosFijos.map((t, i) => (
+                          <div key={i} style={{ fontSize: '0.78rem', color: '#5a6b60' }}>
+                            📌 {DIAS_FIJOS.find(d => d.key === t.dia)?.label} {t.hora}
+                          </div>
+                        ))
+                      ) : a.turnoFijo ? (
                         <div style={{ fontSize: '0.78rem', color: '#5a6b60' }}>📌 {a.turnoFijo}</div>
-                      )}
+                      ) : null}
                     </td>
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -240,9 +265,33 @@ export default function GestionAlumnas() {
                   onChange={e => setForm(f => ({ ...f, planVencimiento: e.target.value }))} />
               </div>
               <div className="input-group">
-                <label>Turno fijo asignado</label>
-                <input type="text" value={form.turnoFijo} placeholder="Ej: Lunes y miércoles 9:00"
-                  onChange={e => setForm(f => ({ ...f, turnoFijo: e.target.value }))} />
+                <label>Turnos fijos</label>
+                <div style={{ marginBottom: 8 }}>
+                  {(form.turnosFijos || []).length === 0 && (
+                    <div style={{ color: '#aaa', fontSize: '0.88rem', marginBottom: 8 }}>Sin turnos fijos asignados</div>
+                  )}
+                  {(form.turnosFijos || []).map((t, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: '#f0f7f2', borderRadius: 8, border: '1px solid #c8ddd0', marginBottom: 6 }}>
+                      <span style={{ flex: 1, fontWeight: 600 }}>{DIAS_FIJOS.find(d => d.key === t.dia)?.label} {t.hora} hs</span>
+                      <button type="button"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', fontWeight: 700, fontSize: '1rem', lineHeight: 1 }}
+                        onClick={() => setForm(f => ({ ...f, turnosFijos: f.turnosFijos.filter((_, j) => j !== i) }))}>✕</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <select value={diaSlot} onChange={e => setDiaSlot(e.target.value)}
+                    style={{ flex: 1, padding: '10px 12px', border: '2px solid #c8ddd0', borderRadius: 8, fontFamily: 'Lato, sans-serif', fontSize: '0.92rem' }}>
+                    {DIAS_FIJOS.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+                  </select>
+                  <select value={horaSlot} onChange={e => setHoraSlot(e.target.value)}
+                    style={{ flex: 1, padding: '10px 12px', border: '2px solid #c8ddd0', borderRadius: 8, fontFamily: 'Lato, sans-serif', fontSize: '0.92rem' }}>
+                    {HORAS_FIJAS.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                  <button type="button" className="btn btn-secondary"
+                    style={{ padding: '10px 14px', minHeight: 46, fontSize: '0.88rem', whiteSpace: 'nowrap' }}
+                    onClick={agregarSlot}>+ Agregar</button>
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 16, marginBottom: 18, alignItems: 'center' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 700, color: '#5a6b60' }}>
