@@ -537,10 +537,18 @@ export default function GestionTurnos() {
 
             {(() => {
               const yaAnotadas = reservas.filter(r => r.fecha === modalReserva.fecha && r.hora === modalReserva.hora && r.estado !== 'cancelada')
-              return yaAnotadas.length > 0 && (
+              const diaIdx = DIAS.findIndex((_, i) => fechaISO(addDays(semana, i)) === modalReserva.fecha)
+              const diaKey = diaIdx !== -1 ? DIA_KEYS[diaIdx] : null
+              const fijasSinDoc = diaKey ? alumnas.filter(a =>
+                (a.turnosFijos || []).some(t => t.dia === diaKey && t.hora === modalReserva.hora) &&
+                !yaAnotadas.some(r => r.alumnaId === a.id)
+              ) : []
+              const total = yaAnotadas.length + fijasSinDoc.length
+              return total > 0 && (
                 <div style={{ marginBottom: 16, padding: '10px 14px', background: '#f0f7f2', borderRadius: 8 }}>
-                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#5a6b60', marginBottom: 6 }}>Ya anotadas ({yaAnotadas.length}/5):</div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#5a6b60', marginBottom: 6 }}>Ya anotadas ({total}/5):</div>
                   {yaAnotadas.map(r => <div key={r.id} style={{ fontSize: '0.9rem', color: '#2d5a3a' }}>· {r.alumnaNombre}</div>)}
+                  {fijasSinDoc.map(a => <div key={a.id} style={{ fontSize: '0.9rem', color: '#2d5a3a' }}>· {a.nombre} {a.apellido} <span style={{ fontSize: '0.78rem', color: '#5a6b60' }}>(turno fijo)</span></div>)}
                 </div>
               )
             })()}
