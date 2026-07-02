@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, doc, updateDoc, getDoc, deleteDoc } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, updateDoc, getDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 
 const HORAS = Array.from({ length: 13 }, (_, i) => `${(8+i).toString().padStart(2,'0')}:00`)
+const DIA_KEYS = ['lun', 'mar', 'mie', 'jue', 'vie'] // getDay() 1-5 → index 0-4
 
 export default function PanelDashboard() {
   const [reservasHoy, setReservasHoy] = useState([])
@@ -16,12 +17,46 @@ export default function PanelDashboard() {
 
   async function cargar() {
     setCargando(true)
-    const snap = await getDocs(query(
-      collection(db, 'reservas'),
-      where('fecha', '==', hoy),
-      where('estado', 'in', ['confirmada', 'pendiente'])
-    ))
-    setReservasHoy(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    const diaKey = DIA_KEYS[new Date().getDay() - 1] // undefined on weekends
+
+    const [snapRes, snapAlumnas] = await Promise.all([
+      getDocs(query(
+        collection(db, 'reservas'),
+        where('fecha', '==', hoy),
+        where('estado', 'in', ['confirmada', 'pendiente'])
+      )),
+      getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
+    ])
+
+    const reales = snapRes.docs.map(d => ({ id: d.id, ...d.data() }))
+
+    // Add virtual turnosFijo entries for students without a reservation doc today
+    const virtuales = []
+    if (diaKey) {
+      const alumnaIdsConDoc = new Set(reales.map(r => r.alumnaId).filter(Boolean))
+      for (const aDoc of snapAlumnas.docs) {
+        const a = { id: aDoc.id, ...aDoc.data() }
+        if (a.estado === 'inactiva') continue
+        const turnosHoy = (a.turnosFijos || []).filter(t => t.dia === diaKey)
+        for (const t of turnosHoy) {
+          // Skip if this alumna already has a real reservation for this hour
+          const yaEnHora = reales.some(r => r.alumnaId === a.id && r.hora === t.hora)
+          if (yaEnHora) continue
+          virtuales.push({
+            id: `v_${a.id}_${t.hora}`,
+            virtual: true,
+            alumnaId: a.id,
+            alumnaNombre: `${a.nombre} ${a.apellido}`,
+            hora: t.hora,
+            tipo: 'fija',
+            estado: 'confirmada',
+            asistio: undefined
+          })
+        }
+      }
+    }
+
+    setReservasHoy([...reales, ...virtuales])
     setCargando(false)
   }
 
@@ -54,24 +89,42 @@ export default function PanelDashboard() {
   }
 
   async function marcarAsistencia(id, alumnaId, asistio, yaMarcada) {
-    // Actualizar la reserva
-    await updateDoc(doc(db, 'reservas', id), { asistio, estado: 'confirmada' })
+    let docId = id
 
-    if (alumnaId) {
-      if (yaMarcada === undefined || yaMarcada === null) {
-        // Primera vez que se marca (asistió o faltó) → descontar clase
-        await descontarClase(alumnaId, false)
-      }
-      // Si ya estaba marcada y se corrige → NO descontar ni devolver
-      // La clase ya fue descontada la primera vez, el cambio asistió↔faltó no afecta el conteo
+    // Virtual turnosFijo entry — materialize it as a real reservation doc first
+    if (typeof id === 'string' && id.startsWith('v_')) {
+      const entry = reservasHoy.find(r => r.id === id)
+      const ref = await addDoc(collection(db, 'reservas'), {
+        alumnaId: entry.alumnaId,
+        alumnaNombre: entry.alumnaNombre,
+        fecha: hoy,
+        hora: entry.hora,
+        tipo: 'fija',
+        estado: 'confirmada',
+        creadaPorSistema: true,
+        creadoEn: serverTimestamp()
+      })
+      docId = ref.id
+      yaMarcada = undefined // first time marking
+      setReservasHoy(prev => prev.map(r => r.id === id ? { ...r, id: docId, virtual: false } : r))
     }
 
-    setReservasHoy(prev => prev.map(r => r.id === id ? { ...r, asistio, estado: 'confirmada' } : r))
+    await updateDoc(doc(db, 'reservas', docId), { asistio, estado: 'confirmada' })
+
+    if (alumnaId && (yaMarcada === undefined || yaMarcada === null)) {
+      await descontarClase(alumnaId, false)
+    }
+
+    setReservasHoy(prev => prev.map(r =>
+      (r.id === id || r.id === docId) ? { ...r, id: docId, asistio, estado: 'confirmada', virtual: false } : r
+    ))
   }
 
   async function quitarDeTurno(reservaId, alumnaNombre) {
     if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
-    await deleteDoc(doc(db, 'reservas', reservaId))
+    if (!(typeof reservaId === 'string' && reservaId.startsWith('v_'))) {
+      await deleteDoc(doc(db, 'reservas', reservaId))
+    }
     setReservasHoy(prev => prev.filter(r => r.id !== reservaId))
   }
 
