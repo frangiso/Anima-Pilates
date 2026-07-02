@@ -39,13 +39,21 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
 
   const horas = getHoras()
   const feriadosCargados = useRef(false)
+  const alumnasFijosRef = useRef(null) // cache: cargado una sola vez por sesión
 
-  // Carga feriados una sola vez al montar
+  // Carga feriados y alumnas una sola vez al montar
   useEffect(() => {
     if (feriadosCargados.current) return
     feriadosCargados.current = true
-    getDocs(collection(db, 'feriados'))
-      .then(snap => setFeriados(snap.docs.map(d => d.data().fecha)))
+    Promise.all([
+      getDocs(collection(db, 'feriados')),
+      getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
+    ]).then(([snapFer, snapAlum]) => {
+      setFeriados(snapFer.docs.map(d => d.data().fecha))
+      alumnasFijosRef.current = snapAlum.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(a => a.estado !== 'inactiva')
+    })
   }, [])
 
   useEffect(() => { cargarSemana() }, [semana])
@@ -53,13 +61,10 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
   async function cargarSemana() {
     setCargando(true)
     const fechas = DIAS.map((_, i) => fechaISO(addDays(semana, i)))
-    const [snapRes, snapAlumnas] = await Promise.all([
-      getDocs(query(collection(db, 'reservas'),
-        where('fecha', 'in', fechas),
-        where('estado', 'in', ['confirmada', 'pendiente'])
-      )),
-      getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
-    ])
+    const snapRes = await getDocs(query(collection(db, 'reservas'),
+      where('fecha', 'in', fechas),
+      where('estado', 'in', ['confirmada', 'pendiente'])
+    ))
     const mapa = {}
     const mias = {}
     const alumnaDocKeys = new Set() // alumnaId_fecha_hora para evitar doble conteo
@@ -71,14 +76,13 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
       if (r.alumnaId) alumnaDocKeys.add(`${r.alumnaId}_${r.fecha}_${r.hora}`)
     })
     // Contar slots virtuales de turnosFijos para que se descuenten del cupo
-    for (const aDoc of snapAlumnas.docs) {
-      const a = aDoc.data()
+    for (const a of (alumnasFijosRef.current || [])) {
       if (a.estado === 'inactiva') continue
       for (const t of (a.turnosFijos || [])) {
         const diaIdx = DIA_KEYS.indexOf(t.dia)
         if (diaIdx === -1) continue
         const fecha = fechaISO(addDays(semana, diaIdx))
-        if (!alumnaDocKeys.has(`${aDoc.id}_${fecha}_${t.hora}`)) {
+        if (!alumnaDocKeys.has(`${a.id}_${fecha}_${t.hora}`)) {
           const key = `${fecha}_${t.hora}`
           mapa[key] = (mapa[key] || 0) + 1
         }
