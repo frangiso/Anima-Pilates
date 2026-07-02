@@ -3,6 +3,7 @@ import { collection, query, where, getDocs, doc, updateDoc, addDoc, deleteDoc, g
 import { db } from '../firebase'
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
+const DIA_KEYS = ['lun', 'mar', 'mie', 'jue', 'vie']
 const CUPOS_MAX = 5
 
 function getHoras() {
@@ -386,9 +387,13 @@ export default function GestionTurnos() {
                     const esFeriado = feriados.find(f => f.fecha === fecha)
                     const bloq = bloqueados.find(b => b.fecha === fecha && b.hora === hora)
                     const resHora = reservas.filter(r => r.fecha === fecha && r.hora === hora && r.estado !== 'cancelada')
-                    const ocupados = resHora.length
                     const hayPendiente = resHora.some(r => r.estado === 'pendiente')
-                    const lleno = ocupados >= CUPOS_MAX
+                    const fijosHora = alumnas.filter(a =>
+                      (a.turnosFijos || []).some(t => t.dia === DIA_KEYS[di] && t.hora === hora) &&
+                      !resHora.some(r => r.alumnaId === a.id)
+                    )
+                    const total = resHora.length + fijosHora.length
+                    const lleno = total >= CUPOS_MAX
 
                     if (esFeriado) return (
                       <div key={`${di}_${hora}`} className="turno-cell turno-lleno" style={{ background: '#fde8e8', cursor: 'not-allowed' }} />
@@ -401,16 +406,16 @@ export default function GestionTurnos() {
                     )
                     if (lleno) return (
                       <div key={`${di}_${hora}`} className="turno-cell turno-reservado"
-                        onClick={() => setModalDetalle({ fecha, hora, resHora })} style={{ cursor: 'pointer' }}>
-                        <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>5/5</span>
+                        onClick={() => setModalDetalle({ fecha, hora, resHora, fijosHora })} style={{ cursor: 'pointer' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>{total}/5</span>
                         {hayPendiente && <span style={{ fontSize: '0.68rem', background: '#fef3cd', color: '#856404', borderRadius: 4, padding: '1px 4px' }}>⏳</span>}
                         <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>Ver / +</span>
                       </div>
                     )
-                    if (ocupados > 0) return (
+                    if (total > 0) return (
                       <div key={`${di}_${hora}`} className="turno-cell turno-reservado"
-                        onClick={() => setModalDetalle({ fecha, hora, resHora })} style={{ cursor: 'pointer' }}>
-                        <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>{ocupados}/5</span>
+                        onClick={() => setModalDetalle({ fecha, hora, resHora, fijosHora })} style={{ cursor: 'pointer' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>{total}/5</span>
                         {hayPendiente && <span style={{ fontSize: '0.68rem', background: '#fef3cd', color: '#856404', borderRadius: 4, padding: '1px 4px' }}>⏳</span>}
                         <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>Ver / +</span>
                       </div>
@@ -484,7 +489,9 @@ export default function GestionTurnos() {
             <h3>
               {new Date(modalDetalle.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })} · {modalDetalle.hora} hs
             </h3>
-            <p style={{ color: '#5a6b60', fontSize: '0.9rem', marginBottom: 16 }}>{modalDetalle.resHora.length}/5 lugares ocupados</p>
+            <p style={{ color: '#5a6b60', fontSize: '0.9rem', marginBottom: 16 }}>
+              {(modalDetalle.resHora.length + (modalDetalle.fijosHora || []).length)}/5 lugares ocupados
+            </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
               {modalDetalle.resHora.map(r => (
                 <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#f8fdf9', borderRadius: 8, border: '1px solid #c8ddd0' }}>
@@ -496,6 +503,14 @@ export default function GestionTurnos() {
                   </div>
                   <button className="btn btn-danger" style={{ padding: '6px 12px', minHeight: 32, fontSize: '0.82rem' }}
                     onClick={() => quitarDeTurnoGrilla(r.id, r.alumnaNombre)}>Quitar</button>
+                </div>
+              ))}
+              {(modalDetalle.fijosHora || []).map(a => (
+                <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#f0f7f2', borderRadius: 8, border: '1px solid #c8ddd0' }}>
+                  <div>
+                    <span style={{ fontWeight: 700 }}>{a.nombre} {a.apellido}</span>
+                    <span className="badge badge-gris" style={{ marginLeft: 8, fontSize: '0.72rem' }}>📌 Turno fijo</span>
+                  </div>
                 </div>
               ))}
             </div>
