@@ -132,7 +132,22 @@ export default function PanelDashboard() {
 
   async function quitarDeTurno(reservaId, alumnaNombre) {
     if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
-    if (!(typeof reservaId === 'string' && reservaId.startsWith('v_'))) {
+    if (typeof reservaId === 'string' && reservaId.startsWith('v_')) {
+      // Entrada virtual: crear doc cancelado para que no reaparezca al recargar
+      const entry = reservasHoy.find(r => r.id === reservaId)
+      if (entry) {
+        await addDoc(collection(db, 'reservas'), {
+          alumnaId: entry.alumnaId,
+          alumnaNombre: entry.alumnaNombre,
+          fecha: hoy,
+          hora: entry.hora,
+          tipo: 'fija',
+          estado: 'cancelada',
+          quitadaPorProfe: true,
+          creadoEn: serverTimestamp()
+        })
+      }
+    } else {
       await deleteDoc(doc(db, 'reservas', reservaId))
     }
     setReservasHoy(prev => prev.filter(r => r.id !== reservaId))
