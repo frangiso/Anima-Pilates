@@ -100,29 +100,8 @@ export default function GestionTurnos() {
   }
 
   async function aprobar(id, alumnaId, fecha, hora, alumnaNombre) {
-    const reservaSnap = await getDoc(doc(db, 'reservas', id))
-    const reservaData = reservaSnap.data()
     await updateDoc(doc(db, 'reservas', id), { estado: 'confirmada' })
     const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
-
-    // Descontar 1 clase al aprobar (no descontar si es clase de recuperación por cancelación tardía)
-    if (alumnaId && !reservaData?.usaSlotRecuperacion) {
-      const alumnaSnap = await getDoc(doc(db, 'usuarios', alumnaId))
-      if (alumnaSnap.exists()) {
-        const alumna = alumnaSnap.data()
-        const clases = alumna.clasesRestantes ?? null
-        if (clases !== null && clases !== undefined) {
-          const nuevas = Math.max(0, clases - 1)
-          await updateDoc(doc(db, 'usuarios', alumnaId), {
-            clasesRestantes: nuevas,
-            clasesUsadas: (alumna.clasesUsadas || 0) + 1
-          })
-          if (nuevas === 0) {
-            await updateDoc(doc(db, 'usuarios', alumnaId), { deuda: true })
-          }
-        }
-      }
-    }
 
     // Notificacion para la profe
     await addDoc(collection(db, 'notificaciones'), {
@@ -184,6 +163,21 @@ export default function GestionTurnos() {
     if (!modalReserva) return
     if (modoExterno && !nombreExterno.trim()) return
     if (!modoExterno && !alumnaSelec) return
+
+    // Verificar que el turno no esté lleno antes de confirmar
+    const diaIdx = DIAS.findIndex((_, i) => fechaISO(addDays(semana, i)) === modalReserva.fecha)
+    const diaKey = diaIdx !== -1 ? DIA_KEYS[diaIdx] : null
+    const yaAnotadasCheck = reservas.filter(r => r.fecha === modalReserva.fecha && r.hora === modalReserva.hora && r.estado !== 'cancelada')
+    const fijasSinDocCheck = diaKey ? alumnas.filter(a =>
+      (a.turnosFijos || []).some(t => t.dia === diaKey && t.hora === modalReserva.hora) &&
+      !reservas.some(r => r.alumnaId === a.id && r.fecha === modalReserva.fecha && r.hora === modalReserva.hora)
+    ) : []
+    if (yaAnotadasCheck.length + fijasSinDocCheck.length >= CUPOS_MAX) {
+      setMsg({ tipo: 'error', texto: 'El turno ya está completo (5/5). No se pueden agregar más alumnas.' })
+      setModalReserva(null)
+      return
+    }
+
     setGuardando(true)
     try {
       if (modoExterno) {
@@ -541,7 +535,7 @@ export default function GestionTurnos() {
               const diaKey = diaIdx !== -1 ? DIA_KEYS[diaIdx] : null
               const fijasSinDoc = diaKey ? alumnas.filter(a =>
                 (a.turnosFijos || []).some(t => t.dia === diaKey && t.hora === modalReserva.hora) &&
-                !yaAnotadas.some(r => r.alumnaId === a.id)
+                !reservas.some(r => r.alumnaId === a.id && r.fecha === modalReserva.fecha && r.hora === modalReserva.hora)
               ) : []
               const total = yaAnotadas.length + fijasSinDoc.length
               return total > 0 && (
