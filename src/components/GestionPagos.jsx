@@ -1,6 +1,14 @@
 import { useState } from 'react'
-import { collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, query, where } from 'firebase/firestore'
+import { collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, query, where, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase'
+
+function diasHasta(fecha) {
+  if (!fecha) return null
+  const hoy = new Date()
+  const venc = fecha.toDate ? fecha.toDate() : new Date(fecha)
+  const diff = Math.ceil((venc - hoy) / (1000 * 60 * 60 * 24))
+  return diff
+}
 
 export default function GestionPagos() {
   const [alumnas, setAlumnas] = useState([])
@@ -45,6 +53,14 @@ export default function GestionPagos() {
     if (!monto) return
     setGuardando(true)
     const a = modal
+    const hoy = new Date()
+    const vencActual = a.planVencimiento
+      ? (a.planVencimiento.toDate ? a.planVencimiento.toDate() : new Date(a.planVencimiento))
+      : null
+    const base = vencActual && vencActual > hoy ? vencActual : hoy
+    const nuevoVencimiento = new Date(base)
+    nuevoVencimiento.setMonth(nuevoVencimiento.getMonth() + 1)
+
     await addDoc(collection(db, 'pagos'), {
       alumnaId: a.id,
       alumnaNombre: `${a.nombre} ${a.apellido}`,
@@ -53,7 +69,10 @@ export default function GestionPagos() {
       fecha: new Date().toISOString().split('T')[0],
       creadoEn: serverTimestamp()
     })
-    await updateDoc(doc(db, 'usuarios', a.id), { deuda: false })
+    await updateDoc(doc(db, 'usuarios', a.id), {
+      deuda: false,
+      planVencimiento: Timestamp.fromDate(nuevoVencimiento)
+    })
     await addDoc(collection(db, 'notificaciones'), {
       tipo: 'pago_registrado',
       titulo: 'Pago registrado',
@@ -62,10 +81,10 @@ export default function GestionPagos() {
       creadoEn: serverTimestamp()
     })
     setAlumnas(prev => aplicarFiltro(
-      prev.map(x => x.id === a.id ? { ...x, deuda: false } : x),
+      prev.map(x => x.id === a.id ? { ...x, deuda: false, planVencimiento: Timestamp.fromDate(nuevoVencimiento) } : x),
       busqueda, filtro
     ))
-    setMsg({ tipo: 'exito', texto: `Pago de ${a.nombre} registrado.` })
+    setMsg({ tipo: 'exito', texto: `Pago de ${a.nombre} registrado. Nuevo vencimiento: ${nuevoVencimiento.toLocaleDateString('es-AR')}.` })
     setModal(null)
     setMonto('')
     setDetalle('')
@@ -162,35 +181,45 @@ export default function GestionPagos() {
                 </tr>
               </thead>
               <tbody>
-                {alumnas.map(a => (
-                  <tr key={a.id}>
-                    <td>
-                      <div style={{ fontWeight: 700 }}>{a.nombre} {a.apellido}</div>
-                      <div style={{ fontSize: '0.82rem', color: '#5a6b60' }}>{a.telefono}</div>
-                    </td>
-                    <td style={{ fontSize: '0.88rem' }}>{a.plan || <span style={{ color: '#aaa' }}>Sin plan</span>}</td>
-                    <td>
-                      <span className={`badge ${a.deuda ? 'badge-rojo' : 'badge-verde'}`}>
-                        {a.deuda ? '⚠️ Adeuda' : '✓ Al día'}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {a.deuda && (
-                          <button className="btn btn-primary" style={{ padding: '7px 14px', minHeight: 36, fontSize: '0.85rem' }}
+                {alumnas.map(a => {
+                  const dias = diasHasta(a.planVencimiento)
+                  const vencido = dias !== null && dias < 0
+                  const porVencer = dias !== null && dias >= 0 && dias <= 3
+                  const destacar = a.deuda || vencido || porVencer
+                  return (
+                    <tr key={a.id}>
+                      <td>
+                        <div style={{ fontWeight: 700 }}>{a.nombre} {a.apellido}</div>
+                        <div style={{ fontSize: '0.82rem', color: '#5a6b60' }}>{a.telefono}</div>
+                      </td>
+                      <td style={{ fontSize: '0.88rem' }}>{a.plan || <span style={{ color: '#aaa' }}>Sin plan</span>}</td>
+                      <td>
+                        <span className={`badge ${a.deuda ? 'badge-rojo' : 'badge-verde'}`}>
+                          {a.deuda ? '⚠️ Adeuda' : '✓ Al día'}
+                        </span>
+                        {!a.deuda && (vencido || porVencer) && (
+                          <div style={{ fontSize: '0.75rem', color: vencido ? '#c0392b' : '#a67c1a', marginTop: 4 }}>
+                            {vencido ? 'Plan vencido' : `Vence en ${dias} día${dias !== 1 ? 's' : ''}`}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button className={`btn ${destacar ? 'btn-primary' : 'btn-ghost'}`}
+                            style={{ padding: '7px 14px', minHeight: 36, fontSize: '0.85rem' }}
                             onClick={() => setModal(a)}>
                             💰 Registrar pago
                           </button>
-                        )}
-                        <button className={`btn ${a.deuda ? 'btn-ghost' : 'btn-danger'}`}
-                          style={{ padding: '7px 14px', minHeight: 36, fontSize: '0.82rem' }}
-                          onClick={() => toggleDeuda(a)}>
-                          {a.deuda ? 'Quitar deuda' : 'Marcar deuda'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <button className={`btn ${a.deuda ? 'btn-ghost' : 'btn-danger'}`}
+                            style={{ padding: '7px 14px', minHeight: 36, fontSize: '0.82rem' }}
+                            onClick={() => toggleDeuda(a)}>
+                            {a.deuda ? 'Quitar deuda' : 'Marcar deuda'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -202,9 +231,24 @@ export default function GestionPagos() {
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Registrar pago</h3>
-            <p style={{ color: '#5a6b60', marginBottom: 20 }}>
+            <p style={{ color: '#5a6b60', marginBottom: 4 }}>
               Alumna: <strong>{modal.nombre} {modal.apellido}</strong>
             </p>
+            {(() => {
+              const hoy = new Date()
+              const vencActual = modal.planVencimiento
+                ? (modal.planVencimiento.toDate ? modal.planVencimiento.toDate() : new Date(modal.planVencimiento))
+                : null
+              const base = vencActual && vencActual > hoy ? vencActual : hoy
+              const nuevoVencimiento = new Date(base)
+              nuevoVencimiento.setMonth(nuevoVencimiento.getMonth() + 1)
+              return (
+                <p style={{ color: '#5a6b60', fontSize: '0.85rem', marginBottom: 16 }}>
+                  Vencimiento actual: <strong>{vencActual ? vencActual.toLocaleDateString('es-AR') : 'sin plan'}</strong>
+                  {' → '}Nuevo vencimiento: <strong>{nuevoVencimiento.toLocaleDateString('es-AR')}</strong>
+                </p>
+              )
+            })()}
             <div className="input-group">
               <label>Monto ($)</label>
               <input type="number" min="0" value={monto} onChange={e => setMonto(e.target.value)}
