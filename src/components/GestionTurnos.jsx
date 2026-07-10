@@ -67,8 +67,9 @@ export default function GestionTurnos() {
     if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
     const reservaSnap = await getDoc(doc(db, 'reservas', reservaId))
     const reservaData = reservaSnap.data()
-    await updateDoc(doc(db, 'reservas', reservaId), { estado: 'cancelada' })
-    if (reservaData?.estado === 'confirmada' && reservaData?.alumnaId && !reservaData?.usaSlotRecuperacion) {
+    await updateDoc(doc(db, 'reservas', reservaId), { estado: 'cancelada', quitadaPorProfe: true })
+    // Devolver clase solo si fue efectivamente cobrada (clasesDescontadas) o ya marcada asistencia
+    if (reservaData?.alumnaId && (reservaData?.clasesDescontadas === true || (reservaData?.asistio !== undefined && reservaData?.asistio !== null))) {
       const alumnaSnap = await getDoc(doc(db, 'usuarios', reservaData.alumnaId))
       if (alumnaSnap.exists()) {
         const alumna = alumnaSnap.data()
@@ -78,6 +79,9 @@ export default function GestionTurnos() {
             clasesRestantes: clases + 1,
             clasesUsadas: Math.max(0, (alumna.clasesUsadas || 0) - 1)
           })
+          if (alumna.deuda && clases === 0) {
+            await updateDoc(doc(db, 'usuarios', reservaData.alumnaId), { deuda: false })
+          }
         }
       }
     }
