@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { collection, getDocs, doc, updateDoc, deleteDoc, addDoc, query, where, Timestamp, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
+import { invalidateAlumnas } from '../alumnaCache'
 
 const PLANES = ['Plan mensual — 2 veces/semana', 'Plan mensual — 3 veces/semana', 'Plan mensual — libre', 'Pack 8 clases', 'Pack 12 clases', 'Clase suelta']
 
@@ -89,6 +90,7 @@ export default function GestionAlumnas() {
       datos.planVencimiento = Timestamp.fromDate(new Date(form.planVencimiento + 'T12:00'))
     }
     await updateDoc(doc(db, 'usuarios', editando), datos)
+    invalidateAlumnas()
 
     // Si se asignó o cambió el plan, crear aviso para la alumna
     const alumnaActual = alumnas.find(a => a.id === editando)
@@ -116,6 +118,7 @@ export default function GestionAlumnas() {
     if (!eliminando) return
     setGuardando(true)
     await deleteDoc(doc(db, 'usuarios', eliminando.id))
+    invalidateAlumnas()
     setAlumnas(prev => prev.filter(a => a.id !== eliminando.id))
     setMsg({ tipo: 'exito', texto: `${eliminando.nombre} ${eliminando.apellido} fue eliminada.` })
     setEliminando(null)

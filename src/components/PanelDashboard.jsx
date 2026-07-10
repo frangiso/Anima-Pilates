@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { collection, query, where, getDocs, doc, updateDoc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
+import { getAlumnas } from '../alumnaCache'
 
 const HORAS = Array.from({ length: 13 }, (_, i) => `${(8+i).toString().padStart(2,'0')}:00`)
 const DIA_KEYS = ['lun', 'mar', 'mie', 'jue', 'vie'] // getDay() 1-5 → index 0-4
@@ -19,13 +20,13 @@ export default function PanelDashboard() {
     setCargando(true)
     const diaKey = DIA_KEYS[new Date().getDay() - 1] // undefined on weekends
 
-    const [snapRes, snapAlumnas, snapCanceladas] = await Promise.all([
+    const [snapRes, todasAlumnas, snapCanceladas] = await Promise.all([
       getDocs(query(
         collection(db, 'reservas'),
         where('fecha', '==', hoy),
         where('estado', 'in', ['confirmada', 'pendiente'])
       )),
-      getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna'))),
+      getAlumnas(),
       getDocs(query(
         collection(db, 'reservas'),
         where('fecha', '==', hoy),
@@ -42,8 +43,7 @@ export default function PanelDashboard() {
     // Add virtual turnosFijo entries for students without a reservation doc today
     const virtuales = []
     if (diaKey) {
-      for (const aDoc of snapAlumnas.docs) {
-        const a = { id: aDoc.id, ...aDoc.data() }
+      for (const a of todasAlumnas) {
         if (a.estado === 'inactiva') continue
         const turnosHoy = (a.turnosFijos || []).filter(t => t.dia === diaKey)
         for (const t of turnosHoy) {

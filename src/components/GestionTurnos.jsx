@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, deleteDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
+import { getAlumnas } from '../alumnaCache'
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
 const DIA_KEYS = ['lun', 'mar', 'mie', 'jue', 'vie']
@@ -97,8 +98,8 @@ export default function GestionTurnos() {
   useEffect(() => { cargar() }, [semana])
 
   async function cargarAlumnas() {
-    const snap = await getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
-    const lista = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.estado !== 'inactiva')
+    const todas = await getAlumnas()
+    const lista = todas.filter(u => u.estado !== 'inactiva')
     lista.sort((a, b) => (a.apellido || '').localeCompare(b.apellido || ''))
     setAlumnas(lista)
   }

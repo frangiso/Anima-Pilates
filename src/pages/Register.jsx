@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { doc, setDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
+import { invalidateAlumnas } from '../alumnaCache'
 
 export default function Register() {
   const [form, setForm] = useState({ nombre: '', apellido: '', telefono: '', email: '', pass: '', pass2: '' })
@@ -35,6 +36,7 @@ export default function Register() {
         planVencimiento: null,
         creadoEn: serverTimestamp()
       })
+      invalidateAlumnas()
       // Notificación para la profe
       await addDoc(collection(db, 'notificaciones'), {
         tipo: 'nueva_alumna',

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, increment, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
+import { getAlumnas } from '../alumnaCache'
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie']
 const DIA_KEYS = ['lun', 'mar', 'mie', 'jue', 'vie']
@@ -48,12 +49,10 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
     feriadosCargados.current = true
     Promise.all([
       getDocs(collection(db, 'feriados')),
-      getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
-    ]).then(([snapFer, snapAlum]) => {
+      getAlumnas()
+    ]).then(([snapFer, todasAlumnas]) => {
       setFeriados(snapFer.docs.map(d => d.data().fecha))
-      alumnasFijosRef.current = snapAlum.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(a => a.estado !== 'inactiva')
+      alumnasFijosRef.current = todasAlumnas.filter(a => a.estado !== 'inactiva')
     })
   }, [])
 
