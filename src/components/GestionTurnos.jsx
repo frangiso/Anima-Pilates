@@ -117,7 +117,32 @@ export default function GestionTurnos() {
   }
 
   async function aprobar(id, alumnaId, fecha, hora, alumnaNombre) {
-    await updateDoc(doc(db, 'reservas', id), { estado: 'confirmada' })
+    const reservaSnap = await getDoc(doc(db, 'reservas', id))
+    const reservaData = reservaSnap.data()
+
+    // Descontar clase al aprobar (solo si no es recuperación). Marcar clasesDescontadas: true
+    // para que PanelDashboard no descuente de nuevo al marcar asistencia.
+    let clasesDescontadas = false
+    if (alumnaId && !reservaData?.usaSlotRecuperacion) {
+      const alumnaSnap = await getDoc(doc(db, 'usuarios', alumnaId))
+      if (alumnaSnap.exists()) {
+        const alumna = alumnaSnap.data()
+        const clases = alumna.clasesRestantes ?? null
+        if (clases !== null && clases !== undefined) {
+          const nuevas = Math.max(0, clases - 1)
+          await updateDoc(doc(db, 'usuarios', alumnaId), {
+            clasesRestantes: nuevas,
+            clasesUsadas: (alumna.clasesUsadas || 0) + 1
+          })
+          if (nuevas === 0) {
+            await updateDoc(doc(db, 'usuarios', alumnaId), { deuda: true })
+          }
+          clasesDescontadas = true
+        }
+      }
+    }
+
+    await updateDoc(doc(db, 'reservas', id), { estado: 'confirmada', clasesDescontadas })
     const fechaStr = fecha ? new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
 
     // Notificacion para la profe

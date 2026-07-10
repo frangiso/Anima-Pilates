@@ -76,7 +76,7 @@ export default function MisReservas() {
     setCancelando(id)
     await updateDoc(doc(db, 'reservas', id), { estado: 'cancelada' })
 
-    if (reserva?.estado === 'confirmada' && reserva?.alumnaId) {
+    if (reserva?.estado === 'confirmada' && reserva?.alumnaId && reserva?.clasesDescontadas) {
       const alumnaSnap = await getDoc(doc(db, 'usuarios', reserva.alumnaId))
       if (alumnaSnap.exists()) {
         const alumna = alumnaSnap.data()

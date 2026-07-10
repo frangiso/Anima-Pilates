@@ -121,7 +121,9 @@ export default function PanelDashboard() {
 
     await updateDoc(doc(db, 'reservas', docId), { asistio, estado: 'confirmada' })
 
-    if (alumnaId && (yaMarcada === undefined || yaMarcada === null)) {
+    // Solo descontar si la clase no fue cobrada ya al aprobar la solicitud
+    const entradaActual = reservasHoy.find(r => r.id === id || r.id === docId)
+    if (alumnaId && (yaMarcada === undefined || yaMarcada === null) && !entradaActual?.clasesDescontadas) {
       await descontarClase(alumnaId, false)
     }
 
