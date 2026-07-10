@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { collection, query, where, getDocs, doc, updateDoc, getDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, doc, updateDoc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 
 const HORAS = Array.from({ length: 13 }, (_, i) => `${(8+i).toString().padStart(2,'0')}:00`)
@@ -90,11 +90,15 @@ export default function PanelDashboard() {
         await updateDoc(doc(db, 'usuarios', alumnaId), { deuda: true })
       }
     } else {
-      // Devolver: se revierte el descuento (al usar "Corregir" desde sin-marcar)
+      // Devolver: se revierte el descuento
       await updateDoc(doc(db, 'usuarios', alumnaId), {
         clasesRestantes: clases + 1,
         clasesUsadas: Math.max(0, usadas - 1)
       })
+      // Si tenía deuda por llegar a 0 clases, limpiarla
+      if (alumna.deuda && clases === 0) {
+        await updateDoc(doc(db, 'usuarios', alumnaId), { deuda: false })
+      }
     }
   }
 
@@ -150,7 +154,12 @@ export default function PanelDashboard() {
         })
       }
     } else {
-      await deleteDoc(doc(db, 'reservas', reservaId))
+      const entry = reservasHoy.find(r => r.id === reservaId)
+      await updateDoc(doc(db, 'reservas', reservaId), { estado: 'cancelada', quitadaPorProfe: true })
+      // Devolver clase si fue cobrada al aprobar o si la asistencia ya estaba marcada
+      if (entry?.alumnaId && (entry?.clasesDescontadas === true || (entry?.asistio !== undefined && entry?.asistio !== null))) {
+        await descontarClase(entry.alumnaId, true)
+      }
     }
     setReservasHoy(prev => prev.filter(r => r.id !== reservaId))
   }
