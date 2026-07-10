@@ -46,6 +46,23 @@ export default function GestionTurnos() {
   const [nuevaFecha, setNuevaFecha] = useState('')
   const [nuevaDesc, setNuevaDesc] = useState('')
 
+  async function quitarTurnoFijoVirtual(alumnaId, alumnaNombre, fecha, hora) {
+    if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
+    await addDoc(collection(db, 'reservas'), {
+      alumnaId,
+      alumnaNombre,
+      fecha,
+      hora,
+      tipo: 'fija',
+      estado: 'cancelada',
+      quitadaPorProfe: true,
+      creadoEn: serverTimestamp()
+    })
+    setModalDetalle(null)
+    await cargar()
+    setMsg({ tipo: 'exito', texto: `${alumnaNombre} quitada del turno.` })
+  }
+
   async function quitarDeTurnoGrilla(reservaId, alumnaNombre) {
     if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
     const reservaSnap = await getDoc(doc(db, 'reservas', reservaId))
@@ -505,6 +522,10 @@ export default function GestionTurnos() {
                     <span style={{ fontWeight: 700 }}>{a.nombre} {a.apellido}</span>
                     <span className="badge badge-gris" style={{ marginLeft: 8, fontSize: '0.72rem' }}>📌 Turno fijo</span>
                   </div>
+                  <button className="btn btn-danger" style={{ padding: '6px 12px', minHeight: 32, fontSize: '0.82rem' }}
+                    onClick={() => quitarTurnoFijoVirtual(a.id, `${a.nombre} ${a.apellido}`, modalDetalle.fecha, modalDetalle.hora)}>
+                    Quitar
+                  </button>
                 </div>
               ))}
             </div>

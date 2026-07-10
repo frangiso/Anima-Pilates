@@ -136,9 +136,11 @@ export default function ProfePanel() {
         <div style={{ display: tab === 'alumnas' ? 'block' : 'none' }}>
           <GestionAlumnas />
         </div>
-        <div style={{ display: tab === 'turnos' ? 'block' : 'none' }}>
-          <GestionTurnos />
-        </div>
+        {tab === 'turnos' && (
+          <div>
+            <GestionTurnos />
+          </div>
+        )}
         <div style={{ display: tab === 'pagos' ? 'block' : 'none' }}>
           <GestionPagos />
         </div>
