@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { collection, getDocs, doc, updateDoc, deleteDoc, addDoc, query, where, Timestamp, serverTimestamp } from 'firebase/firestore'
+import { collection, getDocs, doc, updateDoc, addDoc, query, where, Timestamp, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { invalidateAlumnas } from '../alumnaCache'
 
@@ -117,10 +117,10 @@ export default function GestionAlumnas() {
   async function confirmarEliminar() {
     if (!eliminando) return
     setGuardando(true)
-    await deleteDoc(doc(db, 'usuarios', eliminando.id))
+    await updateDoc(doc(db, 'usuarios', eliminando.id), { estado: 'inactiva' })
     invalidateAlumnas()
-    setAlumnas(prev => prev.filter(a => a.id !== eliminando.id))
-    setMsg({ tipo: 'exito', texto: `${eliminando.nombre} ${eliminando.apellido} fue eliminada.` })
+    setAlumnas(prev => prev.map(a => a.id === eliminando.id ? { ...a, estado: 'inactiva' } : a))
+    setMsg({ tipo: 'exito', texto: `${eliminando.nombre} ${eliminando.apellido} fue dada de baja.` })
     setEliminando(null)
     setGuardando(false)
   }
@@ -232,7 +232,7 @@ export default function GestionAlumnas() {
                         </button>
                         <button className="btn btn-danger" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
                           onClick={() => setEliminando(a)}>
-                          Eliminar
+                          Dar de baja
                         </button>
                       </div>
                     </td>
@@ -329,16 +329,16 @@ export default function GestionAlumnas() {
       {eliminando && (
         <div className="modal-overlay" onClick={() => setEliminando(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3 style={{ color: '#c0392b' }}>Eliminar alumna</h3>
+            <h3 style={{ color: '#c0392b' }}>Dar de baja</h3>
             <p style={{ color: '#5a6b60', margin: '16px 0' }}>
-              ¿Estás segura que querés eliminar a <strong>{eliminando.nombre} {eliminando.apellido}</strong>?
+              ¿Dar de baja a <strong>{eliminando.nombre} {eliminando.apellido}</strong>?
             </p>
             <div className="alert alert-error" style={{ fontSize: '0.9rem' }}>
-              ⚠️ Esta acción no se puede deshacer.
+              La cuenta queda inactiva. Si vuelve, podés reactivarla desde Editar → Estado.
             </div>
             <div className="modal-actions">
               <button className="btn btn-danger" onClick={confirmarEliminar} disabled={guardando} style={{ flex: 1 }}>
-                {guardando ? 'Eliminando...' : 'Sí, eliminar'}
+                {guardando ? 'Procesando...' : 'Sí, dar de baja'}
               </button>
               <button className="btn btn-ghost" onClick={() => setEliminando(null)} style={{ flex: 1 }}>Cancelar</button>
             </div>

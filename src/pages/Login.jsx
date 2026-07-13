@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
+import { invalidateAlumnas } from '../alumnaCache'
 
 export default function Login() {
   const [telefono, setTelefono] = useState('')
@@ -13,6 +14,12 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [modoReset, setModoReset] = useState(false)
   const [resetMsg, setResetMsg] = useState('')
+  // Recuperación: alumna con teléfono registrado pero doc de Firestore borrado
+  const [recuperacion, setRecuperacion] = useState(null) // { uid, nombre, telefono }
+  const [recEmail, setRecEmail] = useState('')
+  const [recPass, setRecPass] = useState('')
+  const [recNombre, setRecNombre] = useState('')
+  const [recApellido, setRecApellido] = useState('')
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const esProfe = params.get('rol') === 'profe'
@@ -56,7 +63,10 @@ export default function Login() {
       const { uid } = telSnap.data()
       const alumnaSnap = await getDoc(doc(db, 'usuarios', uid))
       if (!alumnaSnap.exists()) {
-        setError('Error al encontrar tu cuenta. Contactá a la profesora.')
+        // Cuenta de Auth existe pero el doc fue borrado — ofrecer recuperación
+        setRecuperacion({ uid, nombre: telSnap.data().nombre || '', telefono: telLimpio })
+        setRecNombre((telSnap.data().nombre || '').split(' ')[0] || '')
+        setRecApellido((telSnap.data().nombre || '').split(' ').slice(1).join(' ') || '')
         setLoading(false)
         return
       }
@@ -69,6 +79,47 @@ export default function Login() {
         setError('Contraseña incorrecta.')
       } else if (err.code === 'auth/too-many-requests') {
         setError('Demasiados intentos. Esperá unos minutos.')
+      } else {
+        setError('Error al ingresar. Revisá los datos.')
+      }
+      setLoading(false)
+    }
+  }
+
+  async function handleRecuperacion(e) {
+    e.preventDefault()
+    if (!recuperacion) return
+    setError('')
+    setLoading(true)
+    try {
+      await signInWithEmailAndPassword(auth, recEmail.trim().toLowerCase(), recPass)
+      // Recrear el doc de Firestore con el mismo UID
+      await setDoc(doc(db, 'usuarios', recuperacion.uid), {
+        nombre: recNombre.trim(),
+        apellido: recApellido.trim(),
+        telefono: recuperacion.telefono,
+        email: recEmail.trim().toLowerCase(),
+        rol: 'alumna',
+        estado: 'activa',
+        plan: null,
+        clasesRestantes: 0,
+        clasesUsadas: 0,
+        deuda: false,
+        planVencimiento: null,
+        creadoEn: serverTimestamp()
+      })
+      invalidateAlumnas()
+      await addDoc(collection(db, 'notificaciones'), {
+        tipo: 'nueva_alumna',
+        titulo: 'Alumna reactivada',
+        mensaje: `${recNombre.trim()} ${recApellido.trim()} volvió y completó su registro nuevamente.`,
+        leida: false,
+        creadoEn: serverTimestamp()
+      })
+      navigate('/alumna', { replace: true })
+    } catch (err) {
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        setError('Contraseña incorrecta.')
       } else {
         setError('Error al ingresar. Revisá los datos.')
       }
@@ -89,6 +140,54 @@ export default function Login() {
   }
 
   if (authLoading) return <div className="spinner" style={{ minHeight: '100vh' }} />
+
+  // Pantalla de recuperación para alumnas con doc borrado
+  if (recuperacion) return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(160deg, #f0f7f2 0%, #faf8f4 100%)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px'
+    }}>
+      <div style={{ width: '100%', maxWidth: 420 }}>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <h2 style={{ color: '#4a7c59', letterSpacing: '0.1em' }}>ANIMA PILATES</h2>
+          <p style={{ color: '#5a6b60', marginTop: 8 }}>Completá tu registro para continuar</p>
+        </div>
+        <div className="card">
+          <div className="alert alert-info" style={{ marginBottom: 20, fontSize: '0.92rem' }}>
+            🌿 ¡Bienvenida de vuelta! Tu cuenta fue dada de baja anteriormente. Completá tus datos para volver a usar la app.
+          </div>
+          <form onSubmit={handleRecuperacion}>
+            {error && <div className="alert alert-error">{error}</div>}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+              <div className="input-group">
+                <label>Nombre</label>
+                <input type="text" value={recNombre} onChange={e => setRecNombre(e.target.value)} required />
+              </div>
+              <div className="input-group">
+                <label>Apellido</label>
+                <input type="text" value={recApellido} onChange={e => setRecApellido(e.target.value)} required />
+              </div>
+            </div>
+            <div className="input-group">
+              <label>Correo electrónico</label>
+              <input type="email" value={recEmail} onChange={e => setRecEmail(e.target.value)}
+                placeholder="El mismo que usaste al registrarte" required autoFocus />
+            </div>
+            <div className="input-group">
+              <label>Contraseña</label>
+              <input type="password" value={recPass} onChange={e => setRecPass(e.target.value)}
+                placeholder="••••••••" required />
+            </div>
+            <button className="btn btn-primary" type="submit" disabled={loading}
+              style={{ width: '100%', marginTop: 8 }}>
+              {loading ? 'Ingresando...' : 'Volver a ingresar'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div style={{
