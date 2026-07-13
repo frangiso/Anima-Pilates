@@ -155,20 +155,10 @@ export default function Login() {
         </div>
         <div className="card">
           <div className="alert alert-info" style={{ marginBottom: 20, fontSize: '0.92rem' }}>
-            🌿 ¡Bienvenida de vuelta! Tu cuenta fue dada de baja anteriormente. Completá tus datos para volver a usar la app.
+            🌿 ¡Bienvenida de vuelta, {recNombre || recuperacion.nombre}! Ingresá con tu email y contraseña para continuar.
           </div>
           <form onSubmit={handleRecuperacion}>
             {error && <div className="alert alert-error">{error}</div>}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-              <div className="input-group">
-                <label>Nombre</label>
-                <input type="text" value={recNombre} onChange={e => setRecNombre(e.target.value)} required />
-              </div>
-              <div className="input-group">
-                <label>Apellido</label>
-                <input type="text" value={recApellido} onChange={e => setRecApellido(e.target.value)} required />
-              </div>
-            </div>
             <div className="input-group">
               <label>Correo electrónico</label>
               <input type="email" value={recEmail} onChange={e => setRecEmail(e.target.value)}
@@ -181,7 +171,7 @@ export default function Login() {
             </div>
             <button className="btn btn-primary" type="submit" disabled={loading}
               style={{ width: '100%', marginTop: 8 }}>
-              {loading ? 'Ingresando...' : 'Volver a ingresar'}
+              {loading ? 'Ingresando...' : 'Ingresar'}
             </button>
           </form>
         </div>
