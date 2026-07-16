@@ -136,10 +136,25 @@ export default function PanelDashboard() {
     ))
   }
 
+  async function otorgarRecuperacion(alumnaId) {
+    const mesActual = new Date().toISOString().substring(0, 7)
+    const alumnaSnap = await getDoc(doc(db, 'usuarios', alumnaId))
+    if (!alumnaSnap.exists()) return
+    const alumna = alumnaSnap.data()
+    const mismoMes = alumna.recuperacionesMes === mesActual
+    const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
+    if (slotsActuales < 2) {
+      await updateDoc(doc(db, 'usuarios', alumnaId), {
+        recuperacionesDisponibles: slotsActuales + 1,
+        recuperacionesMes: mesActual
+      })
+    }
+  }
+
   async function quitarDeTurno(reservaId, alumnaNombre) {
     if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
     if (typeof reservaId === 'string' && reservaId.startsWith('v_')) {
-      // Entrada virtual: crear doc cancelado para que no reaparezca al recargar
+      // Entrada virtual (turno fijo sin doc): crear doc cancelado y otorgar recuperación
       const entry = reservasHoy.find(r => r.id === reservaId)
       if (entry) {
         await addDoc(collection(db, 'reservas'), {
@@ -152,6 +167,7 @@ export default function PanelDashboard() {
           quitadaPorProfe: true,
           creadoEn: serverTimestamp()
         })
+        if (entry.alumnaId) await otorgarRecuperacion(entry.alumnaId)
       }
     } else {
       const entry = reservasHoy.find(r => r.id === reservaId)
@@ -159,6 +175,10 @@ export default function PanelDashboard() {
       // Devolver clase si fue cobrada al aprobar o si la asistencia ya estaba marcada
       if (entry?.alumnaId && (entry?.clasesDescontadas === true || (entry?.asistio !== undefined && entry?.asistio !== null))) {
         await descontarClase(entry.alumnaId, true)
+      }
+      // Otorgar recuperación si era un turno fijo
+      if (entry?.alumnaId && entry?.tipo === 'fija') {
+        await otorgarRecuperacion(entry.alumnaId)
       }
     }
     setReservasHoy(prev => prev.filter(r => r.id !== reservaId))

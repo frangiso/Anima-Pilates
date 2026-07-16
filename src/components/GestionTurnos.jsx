@@ -59,9 +59,23 @@ export default function GestionTurnos() {
       quitadaPorProfe: true,
       creadoEn: serverTimestamp()
     })
+    // Otorgar recuperación (igual que cuando la alumna cancela su turno fijo)
+    const mesActual = new Date().toISOString().substring(0, 7)
+    const alumnaSnap = await getDoc(doc(db, 'usuarios', alumnaId))
+    if (alumnaSnap.exists()) {
+      const alumna = alumnaSnap.data()
+      const mismoMes = alumna.recuperacionesMes === mesActual
+      const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
+      if (slotsActuales < 2) {
+        await updateDoc(doc(db, 'usuarios', alumnaId), {
+          recuperacionesDisponibles: slotsActuales + 1,
+          recuperacionesMes: mesActual
+        })
+      }
+    }
     setModalDetalle(null)
     await cargar()
-    setMsg({ tipo: 'exito', texto: `${alumnaNombre} quitada del turno.` })
+    setMsg({ tipo: 'exito', texto: `${alumnaNombre} quitada del turno. Se otorgó 1 clase de recuperación.` })
   }
 
   async function quitarDeTurnoGrilla(reservaId, alumnaNombre) {
@@ -69,26 +83,43 @@ export default function GestionTurnos() {
     const reservaSnap = await getDoc(doc(db, 'reservas', reservaId))
     const reservaData = reservaSnap.data()
     await updateDoc(doc(db, 'reservas', reservaId), { estado: 'cancelada', quitadaPorProfe: true })
-    // Devolver clase solo si fue efectivamente cobrada (clasesDescontadas) o ya marcada asistencia
-    if (reservaData?.alumnaId && (reservaData?.clasesDescontadas === true || (reservaData?.asistio !== undefined && reservaData?.asistio !== null))) {
+
+    if (reservaData?.alumnaId) {
       const alumnaSnap = await getDoc(doc(db, 'usuarios', reservaData.alumnaId))
       if (alumnaSnap.exists()) {
         const alumna = alumnaSnap.data()
-        const clases = alumna.clasesRestantes ?? null
-        if (clases !== null) {
-          await updateDoc(doc(db, 'usuarios', reservaData.alumnaId), {
-            clasesRestantes: clases + 1,
-            clasesUsadas: Math.max(0, (alumna.clasesUsadas || 0) - 1)
-          })
-          if (alumna.deuda && clases === 0) {
-            await updateDoc(doc(db, 'usuarios', reservaData.alumnaId), { deuda: false })
+        const updates = {}
+
+        // Devolver clase solo si fue efectivamente cobrada
+        if (reservaData?.clasesDescontadas === true || (reservaData?.asistio !== undefined && reservaData?.asistio !== null)) {
+          const clases = alumna.clasesRestantes ?? null
+          if (clases !== null) {
+            updates.clasesRestantes = clases + 1
+            updates.clasesUsadas = Math.max(0, (alumna.clasesUsadas || 0) - 1)
+            if (alumna.deuda && clases === 0) updates.deuda = false
           }
+        }
+
+        // Otorgar recuperación si era un turno fijo
+        if (reservaData?.tipo === 'fija') {
+          const mesActual = new Date().toISOString().substring(0, 7)
+          const mismoMes = alumna.recuperacionesMes === mesActual
+          const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
+          if (slotsActuales < 2) {
+            updates.recuperacionesDisponibles = slotsActuales + 1
+            updates.recuperacionesMes = mesActual
+          }
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await updateDoc(doc(db, 'usuarios', reservaData.alumnaId), updates)
         }
       }
     }
     await cargar()
     setModalDetalle(null)
-    setMsg({ tipo: 'exito', texto: `${alumnaNombre} quitada del turno.` })
+    const eraFija = reservaData?.tipo === 'fija'
+    setMsg({ tipo: 'exito', texto: `${alumnaNombre} quitada del turno.${eraFija ? ' Se otorgó 1 clase de recuperación.' : ''}` })
   }
 
   useEffect(() => {
@@ -253,6 +284,7 @@ export default function GestionTurnos() {
           fecha: modalReserva.fecha,
           hora: modalReserva.hora,
           tipo: tipoReserva,
+          usaSlotRecuperacion: tipoReserva === 'recuperacion',
           estado: 'confirmada',
           creadaPorProfe: true,
           creadoEn: serverTimestamp()
@@ -644,6 +676,7 @@ export default function GestionTurnos() {
               <select value={tipoReserva} onChange={e => setTipoReserva(e.target.value)}>
                 <option value="unica">Clase suelta (una sola vez)</option>
                 <option value="fija">Turno fijo semanal</option>
+                {!modoExterno && <option value="recuperacion">Clase de recuperación</option>}
               </select>
             </div>
 
