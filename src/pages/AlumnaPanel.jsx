@@ -58,7 +58,7 @@ export default function AlumnaPanel() {
         </div>
 
         <div style={{ display: tab === 'reservar' ? 'block' : 'none' }}>
-          <ReservarTurno bloqueada={bloqueada} />
+          <ReservarTurno bloqueada={bloqueada} activa={tab === 'reservar'} />
         </div>
         {tab === 'mis-reservas' && (
           <div>

@@ -26,7 +26,7 @@ function getLunes(fecha) {
 function fechaISO(d) { return d.toISOString().split('T')[0] }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
 
-export default function ReservarTurno({ bloqueada }) {
+export default function ReservarTurno({ bloqueada, activa }) {
   const { user, perfil } = useAuth()
   const [semana, setSemana] = useState(getLunes(new Date()))
   const [reservas, setReservas] = useState({})
@@ -58,6 +58,14 @@ export default function ReservarTurno({ bloqueada }) {
       if (alumnaSnap.exists()) setAlumnaActual(alumnaSnap.data())
     })
   }, [])
+
+  // Re-trae datos frescos de la alumna cada vez que se activa la pestaña
+  useEffect(() => {
+    if (!activa) return
+    getDoc(doc(db, 'usuarios', user.uid)).then(snap => {
+      if (snap.exists()) setAlumnaActual(snap.data())
+    })
+  }, [activa])
 
   useEffect(() => { cargarSemana() }, [semana])
 
