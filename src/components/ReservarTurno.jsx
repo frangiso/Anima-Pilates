@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, increment, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, getDoc, increment, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { getAlumnas } from '../alumnaCache'
@@ -26,7 +26,7 @@ function getLunes(fecha) {
 function fechaISO(d) { return d.toISOString().split('T')[0] }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
 
-export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion }) {
+export default function ReservarTurno({ bloqueada }) {
   const { user, perfil } = useAuth()
   const [semana, setSemana] = useState(getLunes(new Date()))
   const [reservas, setReservas] = useState({})
@@ -38,21 +38,24 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
   const [guardando, setGuardando] = useState(false)
   const [msg, setMsg] = useState(null)
   const [tipoReserva, setTipoReserva] = useState('fija')
+  const [alumnaActual, setAlumnaActual] = useState(null)
 
   const horas = getHoras()
   const feriadosCargados = useRef(false)
   const alumnasFijosRef = useRef(null) // cache: cargado una sola vez por sesión
 
-  // Carga feriados y alumnas una sola vez al montar
+  // Carga feriados, alumnas y datos frescos de la alumna actual al montar
   useEffect(() => {
     if (feriadosCargados.current) return
     feriadosCargados.current = true
     Promise.all([
       getDocs(collection(db, 'feriados')),
-      getAlumnas()
-    ]).then(([snapFer, todasAlumnas]) => {
+      getAlumnas(),
+      getDoc(doc(db, 'usuarios', user.uid))
+    ]).then(([snapFer, todasAlumnas, alumnaSnap]) => {
       setFeriados(snapFer.docs.map(d => d.data().fecha))
       alumnasFijosRef.current = todasAlumnas.filter(a => a.estado !== 'inactiva')
+      if (alumnaSnap.exists()) setAlumnaActual(alumnaSnap.data())
     })
   }, [])
 
@@ -139,6 +142,7 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
       })
       if (tipoReserva === 'recuperacion') {
         await updateDoc(doc(db, 'usuarios', user.uid), { recuperacionesDisponibles: increment(-1) })
+        setAlumnaActual(prev => prev ? { ...prev, recuperacionesDisponibles: (prev.recuperacionesDisponibles ?? 1) - 1 } : prev)
       }
       await addDoc(collection(db, 'notificaciones'), {
         tipo: tipoReserva === 'fija' ? 'turno_fijo_solicitado' : 'nueva_reserva',
@@ -163,6 +167,11 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
   const lunes = fechaISO(semana)
   const semanaAnteriorHabilitada = lunes > hoy
   const tieneTurnosFijos = (perfil?.turnosFijos || []).length > 0
+  // Use fresh Firestore data for booking eligibility; fall back to perfil while loading
+  const mesActual = new Date().toISOString().substring(0, 7)
+  const datosAlumna = alumnaActual ?? perfil
+  const sinClases = !bloqueada && (datosAlumna?.clasesRestantes ?? 0) <= 0
+  const tieneRecuperacion = datosAlumna?.recuperacionesMes === mesActual && (datosAlumna?.recuperacionesDisponibles ?? 0) > 0
 
   return (
     <div>
@@ -262,7 +271,14 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
                     return (
                       <div key={celda.key} className="turno-cell turno-libre"
                         onClick={() => {
-                          if (!puedeSolicitarLibre) return
+                          if (!puedeSolicitarLibre) {
+                            if (tieneTurnosFijos) {
+                              setMsg({ tipo: 'info', texto: 'Para reservar una clase extra necesitás tener recuperaciones disponibles este mes.' })
+                            } else {
+                              setMsg({ tipo: 'info', texto: 'No tenés clases disponibles en tu plan. Hablá con la profesora.' })
+                            }
+                            return
+                          }
                           setTipoReserva(tieneTurnosFijos ? 'recuperacion' : (sinClases ? 'recuperacion' : 'fija'))
                           setModal(celda)
                         }}
@@ -289,7 +305,7 @@ export default function ReservarTurno({ bloqueada, sinClases, tieneRecuperacion 
             </p>
             {tieneRecuperacion && (
               <div className="alert alert-info" style={{ fontSize: '0.88rem', marginBottom: 12 }}>
-                🔄 Tenés {perfil?.recuperacionesDisponibles} de 2 recuperaciones disponibles este mes.
+                🔄 Tenés {datosAlumna?.recuperacionesDisponibles ?? 0} de 2 recuperaciones disponibles este mes.
               </div>
             )}
 
