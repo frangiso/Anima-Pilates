@@ -92,10 +92,8 @@ export default function MisReservas() {
           const mesActual = new Date().toISOString().substring(0, 7)
           const mismoMes = alumna.recuperacionesMes === mesActual
           const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
-          if (slotsActuales < 2) {
-            updates.recuperacionesDisponibles = slotsActuales + 1
-            updates.recuperacionesMes = mesActual
-          }
+          updates.recuperacionesDisponibles = slotsActuales + 1
+          updates.recuperacionesMes = mesActual
         }
 
         if (alumna.deuda && clases === 0) updates.deuda = false
@@ -144,12 +142,10 @@ export default function MisReservas() {
       const mesActual = new Date().toISOString().substring(0, 7)
       const mismoMes = alumna.recuperacionesMes === mesActual
       const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
-      if (slotsActuales < 2) {
-        await updateDoc(doc(db, 'usuarios', user.uid), {
-          recuperacionesDisponibles: slotsActuales + 1,
-          recuperacionesMes: mesActual
-        })
-      }
+      await updateDoc(doc(db, 'usuarios', user.uid), {
+        recuperacionesDisponibles: slotsActuales + 1,
+        recuperacionesMes: mesActual
+      })
     }
 
     setMsg({ tipo: 'exito', texto: 'Turno cancelado. Ganaste 1 clase de recuperación.' })

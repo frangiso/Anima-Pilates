@@ -317,7 +317,7 @@ export default function ReservarTurno({ bloqueada, activa }) {
             </p>
             {tieneRecuperacion && (
               <div className="alert alert-info" style={{ fontSize: '0.88rem', marginBottom: 12 }}>
-                🔄 Tenés {datosAlumna?.recuperacionesDisponibles ?? 0} de 2 recuperaciones disponibles este mes.
+                🔄 Tenés {datosAlumna?.recuperacionesDisponibles ?? 0} recuperación{(datosAlumna?.recuperacionesDisponibles ?? 0) !== 1 ? 'es' : ''} disponible{(datosAlumna?.recuperacionesDisponibles ?? 0) !== 1 ? 's' : ''} este mes.
               </div>
             )}
 

@@ -47,6 +47,9 @@ export default function GestionTurnos() {
   const [nuevaFecha, setNuevaFecha] = useState('')
   const [nuevaDesc, setNuevaDesc] = useState('')
 
+  const [modalTrasladar, setModalTrasladar] = useState(null) // { alumnaId, alumnaNombre, fecha, horaOrigen, reservaId }
+  const [horaDestino, setHoraDestino] = useState('')
+
   async function quitarTurnoFijoVirtual(alumnaId, alumnaNombre, fecha, hora) {
     if (!window.confirm(`¿Querés quitar a ${alumnaNombre} de este turno?`)) return
     await addDoc(collection(db, 'reservas'), {
@@ -66,12 +69,10 @@ export default function GestionTurnos() {
       const alumna = alumnaSnap.data()
       const mismoMes = alumna.recuperacionesMes === mesActual
       const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
-      if (slotsActuales < 2) {
-        await updateDoc(doc(db, 'usuarios', alumnaId), {
-          recuperacionesDisponibles: slotsActuales + 1,
-          recuperacionesMes: mesActual
-        })
-      }
+      await updateDoc(doc(db, 'usuarios', alumnaId), {
+        recuperacionesDisponibles: slotsActuales + 1,
+        recuperacionesMes: mesActual
+      })
     }
     setModalDetalle(null)
     await cargar()
@@ -105,10 +106,8 @@ export default function GestionTurnos() {
           const mesActual = new Date().toISOString().substring(0, 7)
           const mismoMes = alumna.recuperacionesMes === mesActual
           const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
-          if (slotsActuales < 2) {
-            updates.recuperacionesDisponibles = slotsActuales + 1
-            updates.recuperacionesMes = mesActual
-          }
+          updates.recuperacionesDisponibles = slotsActuales + 1
+          updates.recuperacionesMes = mesActual
         }
 
         if (Object.keys(updates).length > 0) {
@@ -312,6 +311,71 @@ export default function GestionTurnos() {
       await cargar()
     } catch {
       setMsg({ tipo: 'error', texto: 'Error al reservar. Intentá nuevamente.' })
+    }
+    setGuardando(false)
+  }
+
+  async function trasladarAlumna() {
+    if (!modalTrasladar || !horaDestino) return
+    setGuardando(true)
+    try {
+      const { alumnaId, alumnaNombre, fecha, horaOrigen, reservaId } = modalTrasladar
+      const alumna = alumnas.find(a => a.id === alumnaId)
+      let clasesDescontadas = false
+
+      if (reservaId) {
+        const reservaSnap = await getDoc(doc(db, 'reservas', reservaId))
+        clasesDescontadas = reservaSnap.data()?.clasesDescontadas === true
+        await updateDoc(doc(db, 'reservas', reservaId), { estado: 'cancelada', quitadaPorProfe: true, trasladada: true })
+      } else {
+        // Turno fijo virtual: crear doc cancelado
+        await addDoc(collection(db, 'reservas'), {
+          alumnaId, alumnaNombre,
+          alumnaEmail: alumna?.email || '',
+          alumnaPhone: alumna?.telefono || '',
+          fecha, hora: horaOrigen,
+          tipo: 'fija', estado: 'cancelada',
+          quitadaPorProfe: true, trasladada: true,
+          creadoEn: serverTimestamp()
+        })
+      }
+
+      // Crear nueva reserva confirmada en destino (la profe puede bypassear el cupo)
+      await addDoc(collection(db, 'reservas'), {
+        alumnaId,
+        alumnaNombre,
+        alumnaEmail: alumna?.email || '',
+        alumnaPhone: alumna?.telefono || '',
+        fecha,
+        hora: horaDestino,
+        tipo: 'unica',
+        estado: 'confirmada',
+        clasesDescontadas,
+        creadaPorProfe: true,
+        trasladada: true,
+        creadoEn: serverTimestamp()
+      })
+
+      // Avisar a la alumna
+      if (alumnaId) {
+        const fechaStr = new Date(fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
+        await addDoc(collection(db, 'avisos'), {
+          alumnaId,
+          tipo: 'traslado',
+          titulo: '📋 Tu turno fue trasladado',
+          mensaje: `Tu clase del ${fechaStr} fue cambiada de ${horaOrigen} a ${horaDestino}hs. Solo aplica para ese día.`,
+          leido: false,
+          creadoEn: serverTimestamp()
+        })
+      }
+
+      setModalTrasladar(null)
+      setHoraDestino('')
+      setModalDetalle(null)
+      await cargar()
+      setMsg({ tipo: 'exito', texto: `${alumnaNombre} trasladada de ${horaOrigen} a ${horaDestino}hs.` })
+    } catch {
+      setMsg({ tipo: 'error', texto: 'Error al trasladar. Intentá nuevamente.' })
     }
     setGuardando(false)
   }
@@ -574,8 +638,16 @@ export default function GestionTurnos() {
                     {r.tipo === 'recuperacion' && <span className="badge badge-amarillo" style={{ marginLeft: 8, fontSize: '0.72rem' }}>Recuperación</span>}
                     {r.estado === 'pendiente' && <span className="badge badge-amarillo" style={{ marginLeft: 8, fontSize: '0.72rem' }}>Pendiente</span>}
                   </div>
-                  <button className="btn btn-danger" style={{ padding: '6px 12px', minHeight: 32, fontSize: '0.82rem' }}
-                    onClick={() => quitarDeTurnoGrilla(r.id, r.alumnaNombre)}>Quitar</button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {r.alumnaId && (
+                      <button className="btn btn-ghost" style={{ padding: '6px 12px', minHeight: 32, fontSize: '0.82rem' }}
+                        onClick={() => { setModalTrasladar({ alumnaId: r.alumnaId, alumnaNombre: r.alumnaNombre, fecha: modalDetalle.fecha, horaOrigen: modalDetalle.hora, reservaId: r.id }); setModalDetalle(null) }}>
+                        Trasladar
+                      </button>
+                    )}
+                    <button className="btn btn-danger" style={{ padding: '6px 12px', minHeight: 32, fontSize: '0.82rem' }}
+                      onClick={() => quitarDeTurnoGrilla(r.id, r.alumnaNombre)}>Quitar</button>
+                  </div>
                 </div>
               ))}
               {(modalDetalle.fijosHora || []).map(a => (
@@ -584,10 +656,16 @@ export default function GestionTurnos() {
                     <span style={{ fontWeight: 700 }}>{a.nombre} {a.apellido}</span>
                     <span className="badge badge-gris" style={{ marginLeft: 8, fontSize: '0.72rem' }}>📌 Turno fijo</span>
                   </div>
-                  <button className="btn btn-danger" style={{ padding: '6px 12px', minHeight: 32, fontSize: '0.82rem' }}
-                    onClick={() => quitarTurnoFijoVirtual(a.id, `${a.nombre} ${a.apellido}`, modalDetalle.fecha, modalDetalle.hora)}>
-                    Quitar
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-ghost" style={{ padding: '6px 12px', minHeight: 32, fontSize: '0.82rem' }}
+                      onClick={() => { setModalTrasladar({ alumnaId: a.id, alumnaNombre: `${a.nombre} ${a.apellido}`, fecha: modalDetalle.fecha, horaOrigen: modalDetalle.hora, reservaId: null }); setModalDetalle(null) }}>
+                      Trasladar
+                    </button>
+                    <button className="btn btn-danger" style={{ padding: '6px 12px', minHeight: 32, fontSize: '0.82rem' }}
+                      onClick={() => quitarTurnoFijoVirtual(a.id, `${a.nombre} ${a.apellido}`, modalDetalle.fecha, modalDetalle.hora)}>
+                      Quitar
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -597,6 +675,40 @@ export default function GestionTurnos() {
                 + Agregar alumna
               </button>
               <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setModalDetalle(null)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal trasladar alumna */}
+      {modalTrasladar && (
+        <div className="modal-overlay" onClick={() => { setModalTrasladar(null); setHoraDestino('') }}>
+          <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <h3>Trasladar alumna</h3>
+            <p style={{ color: '#5a6b60', marginBottom: 12 }}>
+              <strong>{modalTrasladar.alumnaNombre}</strong><br />
+              📅 {new Date(modalTrasladar.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}<br />
+              🕐 {modalTrasladar.horaOrigen} hs → nueva hora
+            </p>
+            <div className="alert alert-info" style={{ fontSize: '0.88rem', marginBottom: 16 }}>
+              Solo aplica para este día. Su turno fijo semanal no se modifica.
+            </div>
+            <div className="input-group">
+              <label>Nueva hora</label>
+              <select value={horaDestino} onChange={e => setHoraDestino(e.target.value)}>
+                <option value="">— Elegí el horario —</option>
+                {horas.filter(h => h !== modalTrasladar.horaOrigen).map(h => (
+                  <option key={h} value={h}>{h} hs</option>
+                ))}
+              </select>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-primary" onClick={trasladarAlumna}
+                disabled={guardando || !horaDestino} style={{ flex: 1 }}>
+                {guardando ? 'Trasladando...' : 'Confirmar traslado'}
+              </button>
+              <button className="btn btn-ghost" onClick={() => { setModalTrasladar(null); setHoraDestino('') }}
+                style={{ flex: 1 }}>Cancelar</button>
             </div>
           </div>
         </div>

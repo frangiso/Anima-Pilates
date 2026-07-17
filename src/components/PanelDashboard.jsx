@@ -143,12 +143,10 @@ export default function PanelDashboard() {
     const alumna = alumnaSnap.data()
     const mismoMes = alumna.recuperacionesMes === mesActual
     const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
-    if (slotsActuales < 2) {
-      await updateDoc(doc(db, 'usuarios', alumnaId), {
-        recuperacionesDisponibles: slotsActuales + 1,
-        recuperacionesMes: mesActual
-      })
-    }
+    await updateDoc(doc(db, 'usuarios', alumnaId), {
+      recuperacionesDisponibles: slotsActuales + 1,
+      recuperacionesMes: mesActual
+    })
   }
 
   async function quitarDeTurno(reservaId, alumnaNombre) {
