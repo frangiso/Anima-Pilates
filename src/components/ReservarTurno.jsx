@@ -129,7 +129,8 @@ export default function ReservarTurno({ bloqueada, activa }) {
     if (esTurnoFijo && !misCanceladas.has(key)) return { estado: 'mia-fija', key, fecha, hora }
     if (mia) return { estado: 'mia', key, fecha, hora, reservaId: mia.id, estadoReserva: mia.estado }
     if (ocupados >= CUPOS_MAX) return { estado: 'lleno', key, fecha, hora }
-    return { estado: 'libre', key, fecha, hora, cuposLibres: CUPOS_MAX - ocupados }
+    // Marcar si es el propio turno fijo que canceló (puede re-anotarse sin gastar recuperación)
+    return { estado: 'libre', key, fecha, hora, cuposLibres: CUPOS_MAX - ocupados, esTurnoFijoCancelado: esTurnoFijo && misCanceladas.has(key) }
   }
 
   async function confirmarReserva() {
@@ -272,10 +273,11 @@ export default function ReservarTurno({ bloqueada, activa }) {
                         <span style={{ fontSize: '0.8rem' }}>Lleno</span>
                       </div>
                     )
-                    // Libre cell: students with fixed schedule can only book recovery classes
-                    const puedeSolicitarLibre = tieneTurnosFijos
+                    // Si es su propio turno fijo cancelado puede re-anotarse sin gastar recuperación
+                    const esTurnoFijoCancelado = celda.esTurnoFijoCancelado
+                    const puedeSolicitarLibre = esTurnoFijoCancelado || (tieneTurnosFijos
                       ? tieneRecuperacion
-                      : (!sinClases || tieneRecuperacion)
+                      : (!sinClases || tieneRecuperacion))
                     return (
                       <div key={celda.key} className="turno-cell turno-libre"
                         onClick={() => {
@@ -287,7 +289,9 @@ export default function ReservarTurno({ bloqueada, activa }) {
                             }
                             return
                           }
-                          setTipoReserva(tieneTurnosFijos ? 'recuperacion' : (sinClases ? 'recuperacion' : 'fija'))
+                          // Re-anotarse en propio turno cancelado → fija (sin gastar recuperación)
+                          // Otro horario con turno fijo → recuperacion
+                          setTipoReserva(esTurnoFijoCancelado ? 'fija' : (tieneTurnosFijos ? 'recuperacion' : (sinClases ? 'recuperacion' : 'fija')))
                           setModal(celda)
                         }}
                         style={!puedeSolicitarLibre ? { cursor: 'not-allowed', opacity: 0.5 } : {}}>
