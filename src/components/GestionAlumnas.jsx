@@ -114,6 +114,30 @@ export default function GestionAlumnas() {
     setGuardando(false)
   }
 
+  async function otorgarRecuperacion(alumna) {
+    if (!window.confirm(`¿Otorgar 1 clase de recuperación a ${alumna.nombre} ${alumna.apellido}?`)) return
+    const mesActual = new Date().toISOString().substring(0, 7)
+    const mismoMes = alumna.recuperacionesMes === mesActual
+    const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
+    await updateDoc(doc(db, 'usuarios', alumna.id), {
+      recuperacionesDisponibles: slotsActuales + 1,
+      recuperacionesMes: mesActual
+    })
+    await addDoc(collection(db, 'avisos'), {
+      alumnaId: alumna.id,
+      tipo: 'recuperacion_otorgada',
+      titulo: '🔄 Clase de recuperación',
+      mensaje: 'La profesora te otorgó 1 clase de recuperación. Podés usarla para reservar en cualquier horario disponible.',
+      leido: false,
+      creadoEn: serverTimestamp()
+    })
+    setAlumnas(prev => prev.map(a => a.id === alumna.id
+      ? { ...a, recuperacionesDisponibles: slotsActuales + 1, recuperacionesMes: mesActual }
+      : a
+    ))
+    setMsg({ tipo: 'exito', texto: `Se otorgó 1 recuperación a ${alumna.nombre} ${alumna.apellido}.` })
+  }
+
   async function confirmarEliminar() {
     if (!eliminando) return
     setGuardando(true)
@@ -205,6 +229,13 @@ export default function GestionAlumnas() {
                       {a.clasesRestantes > 0 && (
                         <div style={{ fontSize: '0.78rem', color: '#4a7c59' }}>{a.clasesRestantes} clases restantes</div>
                       )}
+                      {(() => {
+                        const mesActual = new Date().toISOString().substring(0, 7)
+                        const slots = a.recuperacionesMes === mesActual ? (a.recuperacionesDisponibles ?? 0) : 0
+                        return slots > 0 ? (
+                          <div style={{ fontSize: '0.78rem', color: '#b8860b' }}>🔄 {slots} recuperación{slots !== 1 ? 'es' : ''}</div>
+                        ) : null
+                      })()}
                       {(a.turnosFijos?.length > 0) ? (
                         a.turnosFijos.map((t, i) => (
                           <div key={i} style={{ fontSize: '0.78rem', color: '#5a6b60' }}>
@@ -229,6 +260,10 @@ export default function GestionAlumnas() {
                         <button className="btn btn-secondary" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.88rem' }}
                           onClick={() => abrirEdicion(a)}>
                           Editar
+                        </button>
+                        <button className="btn btn-ghost" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
+                          onClick={() => otorgarRecuperacion(a)}>
+                          + Recuperación
                         </button>
                         <button className="btn btn-danger" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
                           onClick={() => setEliminando(a)}>
