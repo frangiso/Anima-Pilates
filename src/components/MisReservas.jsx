@@ -24,6 +24,7 @@ function getProximasOcurrencias(turnosFijos) {
 
 export default function MisReservas() {
   const { user, perfil } = useAuth()
+  const [perfilFresco, setPerfilFresco] = useState(null)
   const [reservas, setReservas] = useState([])
   const [canceladasFijas, setCanceladasFijas] = useState(new Set())
   const [cargando, setCargando] = useState(true)
@@ -35,25 +36,20 @@ export default function MisReservas() {
   async function cargar() {
     setCargando(true)
     try {
-      const snap = await getDocs(query(
-        collection(db, 'reservas'),
-        where('alumnaId', '==', user.uid),
-        where('estado', 'in', ['confirmada', 'pendiente'])
-      ))
+      const [snap, canceladasSnap, alumnaSnap] = await Promise.all([
+        getDocs(query(collection(db, 'reservas'), where('alumnaId', '==', user.uid), where('estado', 'in', ['confirmada', 'pendiente']))),
+        getDocs(query(collection(db, 'reservas'), where('alumnaId', '==', user.uid), where('estado', '==', 'cancelada'))),
+        getDoc(doc(db, 'usuarios', user.uid))
+      ])
       const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       lista.sort((a, b) => a.fecha.localeCompare(b.fecha))
       setReservas(lista)
-
-      const canceladasSnap = await getDocs(query(
-        collection(db, 'reservas'),
-        where('alumnaId', '==', user.uid),
-        where('estado', '==', 'cancelada')
-      ))
       setCanceladasFijas(new Set(
         canceladasSnap.docs
           .filter(d => d.data().tipo === 'fija')
           .map(d => `${d.data().fecha}_${d.data().hora}`)
       ))
+      if (alumnaSnap.exists()) setPerfilFresco(alumnaSnap.data())
     } catch (err) {
       console.error('Error cargando reservas:', err)
     }
@@ -155,7 +151,7 @@ export default function MisReservas() {
 
   const hoy = new Date().toISOString().split('T')[0]
 
-  const turnosFijos = perfil?.turnosFijos || []
+  const turnosFijos = (perfilFresco ?? perfil)?.turnosFijos || []
   const fechasConDoc = new Set(reservas.map(r => `${r.fecha}_${r.hora}`))
   const virtuales = turnosFijos.length > 0
     ? getProximasOcurrencias(turnosFijos).filter(v =>
