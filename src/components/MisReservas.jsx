@@ -44,7 +44,6 @@ export default function MisReservas() {
       lista.sort((a, b) => a.fecha.localeCompare(b.fecha))
       setReservas(lista)
 
-      // Two-field query (avoids composite index requirement); filter tipo client-side
       const canceladasSnap = await getDocs(query(
         collection(db, 'reservas'),
         where('alumnaId', '==', user.uid),
@@ -97,7 +96,9 @@ export default function MisReservas() {
         }
 
         if (alumna.deuda && clases === 0) updates.deuda = false
-        await updateDoc(doc(db, 'usuarios', reserva.alumnaId), updates)
+        if (Object.keys(updates).length > 0) {
+          await updateDoc(doc(db, 'usuarios', reserva.alumnaId), updates)
+        }
       }
     }
 
@@ -109,7 +110,6 @@ export default function MisReservas() {
     setCancelando(null)
   }
 
-  // Cancel a virtual turnoFijo occurrence (no prior reservation doc, class not yet deducted)
   async function cancelarVirtual(fecha, hora) {
     const hs = hora ? hora.split(':')[0] : '12'
     const fechaTurno = new Date(fecha + 'T' + hs.padStart(2,'0') + ':00:00')
@@ -123,7 +123,6 @@ export default function MisReservas() {
     const cancelKey = `v_${fecha}_${hora}`
     setCancelando(cancelKey)
 
-    // Create a cancelled doc so this occurrence doesn't reappear
     await addDoc(collection(db, 'reservas'), {
       alumnaId: user.uid,
       alumnaNombre: `${perfil.nombre} ${perfil.apellido}`,
@@ -135,7 +134,6 @@ export default function MisReservas() {
       creadoEn: serverTimestamp()
     })
 
-    // Grant recovery slot (class wasn't deducted yet — that happens when teacher marks attendance)
     const alumnaSnap = await getDoc(doc(db, 'usuarios', user.uid))
     if (alumnaSnap.exists()) {
       const alumna = alumnaSnap.data()
@@ -157,7 +155,6 @@ export default function MisReservas() {
 
   const hoy = new Date().toISOString().split('T')[0]
 
-  // Compute upcoming virtual turnosFijo occurrences
   const turnosFijos = perfil?.turnosFijos || []
   const fechasConDoc = new Set(reservas.map(r => `${r.fecha}_${r.hora}`))
   const virtuales = turnosFijos.length > 0
@@ -209,14 +206,16 @@ export default function MisReservas() {
                 <div key={rowKey} style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   padding: '14px 16px', background: '#f8fdf9', borderRadius: 10,
-                  border: '1px solid #c8ddd0', flexWrap: 'wrap', gap: 10
+                  border: r.virtual ? '1px dashed #4a7c59' : '1px solid #c8ddd0',
+                  flexWrap: 'wrap', gap: 10
                 }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '1rem', textTransform: 'capitalize' }}>{fechaStr}</div>
                     <div style={{ color: '#5a6b60', fontSize: '0.9rem', marginTop: 2 }}>
                       🕐 {r.hora} hs
-                      {r.tipo === 'fija' && ' · Turno fijo'}
-                      {r.tipo === 'recuperacion' && ' · Recuperación'}
+                      {r.virtual && ' · 📌 Turno fijo'}
+                      {!r.virtual && r.tipo === 'fija' && ' · Turno fijo'}
+                      {!r.virtual && r.tipo === 'recuperacion' && ' · Recuperación'}
                     </div>
                     {!puedeCancelar && !r.virtual && r.estado === 'confirmada' && (
                       <div style={{ fontSize: '0.78rem', color: '#c0392b', marginTop: 4 }}>
