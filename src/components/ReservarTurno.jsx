@@ -42,7 +42,7 @@ export default function ReservarTurno({ bloqueada, activa }) {
 
   const horas = getHoras()
   const feriadosCargados = useRef(false)
-  const alumnasFijosRef = useRef(null) // cache: cargado una sola vez por sesión
+  const alumnasFijosRef = useRef(null)
 
   // Carga feriados, alumnas y datos frescos de la alumna actual al montar
   useEffect(() => {
@@ -56,12 +56,14 @@ export default function ReservarTurno({ bloqueada, activa }) {
       setFeriados(snapFer.docs.map(d => d.data().fecha))
       alumnasFijosRef.current = todasAlumnas.filter(a => a.estado !== 'inactiva')
       if (alumnaSnap.exists()) setAlumnaActual(alumnaSnap.data())
+      // Re-ejecutar con el ref ya poblado para mostrar capacidad correcta
+      cargarSemana()
     })
   }, [])
 
   // Re-trae datos frescos de la alumna cada vez que se activa la pestaña
   useEffect(() => {
-    if (!activa) return
+    if (!activa || !user) return
     getDoc(doc(db, 'usuarios', user.uid)).then(snap => {
       if (snap.exists()) setAlumnaActual(snap.data())
     })
@@ -74,6 +76,7 @@ export default function ReservarTurno({ bloqueada, activa }) {
     const fechas = DIAS.map((_, i) => fechaISO(addDays(semana, i)))
     // Cargamos TODOS los docs (incluyendo cancelados) para saber si alguien ya tiene doc para esa fecha
     const snapRes = await getDocs(query(collection(db, 'reservas'), where('fecha', 'in', fechas)))
+
     const mapa = {}
     const mias = {}
     const alumnaDocKeys = new Set() // alumnaId_fecha_hora (todos los estados, para no contar virtuales si hay doc)
@@ -176,7 +179,6 @@ export default function ReservarTurno({ bloqueada, activa }) {
   const lunes = fechaISO(semana)
   const semanaAnteriorHabilitada = lunes > hoy
   const tieneTurnosFijos = (perfil?.turnosFijos || []).length > 0
-  // Use fresh Firestore data for booking eligibility; fall back to perfil while loading
   const mesActual = new Date().toISOString().substring(0, 7)
   const datosAlumna = alumnaActual ?? perfil
   const sinClases = !bloqueada && (datosAlumna?.clasesRestantes ?? 0) <= 0
@@ -289,8 +291,6 @@ export default function ReservarTurno({ bloqueada, activa }) {
                             }
                             return
                           }
-                          // Re-anotarse en propio turno cancelado → fija (sin gastar recuperación)
-                          // Otro horario con turno fijo → recuperacion
                           setTipoReserva(esTurnoFijoCancelado ? 'fija' : (tieneTurnosFijos ? 'recuperacion' : (sinClases ? 'recuperacion' : 'fija')))
                           setModal(celda)
                         }}
@@ -315,7 +315,7 @@ export default function ReservarTurno({ bloqueada, activa }) {
               📅 {new Date(modal.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}<br />
               🕐 {modal.hora} hs
             </p>
-            {tieneRecuperacion && (
+            {tieneRecuperacion && !modal.esTurnoFijoCancelado && (
               <div className="alert alert-info" style={{ fontSize: '0.88rem', marginBottom: 12 }}>
                 🔄 Tenés {datosAlumna?.recuperacionesDisponibles ?? 0} recuperación{(datosAlumna?.recuperacionesDisponibles ?? 0) !== 1 ? 'es' : ''} disponible{(datosAlumna?.recuperacionesDisponibles ?? 0) !== 1 ? 's' : ''} este mes.
               </div>
@@ -324,8 +324,13 @@ export default function ReservarTurno({ bloqueada, activa }) {
             <div className="input-group">
               <label>Tipo de reserva</label>
               <select value={tipoReserva} onChange={e => setTipoReserva(e.target.value)}>
-                {tieneRecuperacion && <option value="recuperacion">Clase de recuperación (necesita aprobación)</option>}
-                {!sinClases && !tieneTurnosFijos && <option value="fija">Turno fijo semanal (necesita aprobación)</option>}
+                {modal.esTurnoFijoCancelado
+                  ? <option value="fija">Recuperar mi turno fijo</option>
+                  : <>
+                      {tieneRecuperacion && <option value="recuperacion">Clase de recuperación (necesita aprobación)</option>}
+                      {!sinClases && !tieneTurnosFijos && <option value="fija">Turno fijo semanal (necesita aprobación)</option>}
+                    </>
+                }
               </select>
             </div>
 
