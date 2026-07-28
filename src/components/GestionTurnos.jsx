@@ -142,12 +142,16 @@ export default function GestionTurnos() {
   async function cargar() {
     setCargando(true)
     const fechas = DIAS.map((_, i) => fechaISO(addDays(semana, i)))
-    const [snapRes, snapBloq] = await Promise.all([
+    const [snapRes, snapBloq, todasAlumnas] = await Promise.all([
       getDocs(query(collection(db, 'reservas'), where('fecha', 'in', fechas))),
       getDocs(query(collection(db, 'bloqueados'), where('fecha', 'in', fechas))),
+      getAlumnas(true),
     ])
     setReservas(snapRes.docs.map(d => ({ id: d.id, ...d.data() })))
     setBloqueados(snapBloq.docs.map(d => ({ id: d.id, ...d.data() })))
+    const lista = todasAlumnas.filter(u => u.estado !== 'inactiva')
+    lista.sort((a, b) => (a.apellido || '').localeCompare(b.apellido || ''))
+    setAlumnas(lista)
     setCargando(false)
   }
 
