@@ -11,8 +11,9 @@ export default function PanelDashboard() {
   const [cargando, setCargando] = useState(true)
   const [horaSelec, setHoraSelec] = useState(null)
 
-  const hoy = new Date().toISOString().split('T')[0]
-  const hoySemana = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const _hoy = new Date()
+  const hoy = `${_hoy.getFullYear()}-${String(_hoy.getMonth()+1).padStart(2,'0')}-${String(_hoy.getDate()).padStart(2,'0')}`
+  const hoySemana = _hoy.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   useEffect(() => { cargar() }, [])
 

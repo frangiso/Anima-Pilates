@@ -22,7 +22,7 @@ function getLunes(fecha) {
   return d
 }
 
-function fechaISO(d) { return d.toISOString().split('T')[0] }
+function fechaISO(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
 
 export default function GestionTurnos() {
