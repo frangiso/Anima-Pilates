@@ -22,7 +22,7 @@ function getLunes(fecha) {
   return d
 }
 
-function fechaISO(d) { return d.toISOString().split('T')[0] }
+function fechaISO(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r }
 
 export default function GestionTurnos() {
@@ -694,6 +694,11 @@ export default function GestionTurnos() {
               📅 {new Date(modalTrasladar.fecha + 'T12:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}<br />
               🕐 {modalTrasladar.horaOrigen} hs → nueva hora
             </p>
+            {modalTrasladar.fecha !== fechaISO(new Date()) && (
+              <div className="alert alert-error" style={{ fontSize: '0.88rem', marginBottom: 12 }}>
+                ⚠️ <strong>Atención:</strong> este turno no es de hoy. Verificá que abriste la columna correcta antes de confirmar.
+              </div>
+            )}
             <div className="alert alert-info" style={{ fontSize: '0.88rem', marginBottom: 16 }}>
               Solo aplica para este día. Su turno fijo semanal no se modifica.
             </div>

@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext'
 
 const DIA_GETDAY = { lun: 1, mar: 2, mie: 3, jue: 4, vie: 5 }
 
+function fechaLocal(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+
 function getProximasOcurrencias(turnosFijos) {
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
@@ -12,7 +14,7 @@ function getProximasOcurrencias(turnosFijos) {
   for (let i = 0; i < 28; i++) {
     const d = new Date(hoy)
     d.setDate(d.getDate() + i)
-    const fecha = d.toISOString().split('T')[0]
+    const fecha = fechaLocal(d)
     for (const t of turnosFijos) {
       if (d.getDay() === DIA_GETDAY[t.dia]) {
         result.push({ fecha, hora: t.hora, tipo: 'fija', virtual: true })
@@ -149,7 +151,7 @@ export default function MisReservas() {
 
   if (cargando) return <div className="spinner" />
 
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = fechaLocal(new Date())
 
   const turnosFijos = (perfilFresco ?? perfil)?.turnosFijos || []
   const fechasConDoc = new Set(reservas.map(r => `${r.fecha}_${r.hora}`))
