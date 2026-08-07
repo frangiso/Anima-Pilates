@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { collection, getDocs, doc, updateDoc, addDoc, query, where, Timestamp, serverTimestamp } from 'firebase/firestore'
+import { getAuth } from 'firebase/auth'
 import { db } from '../firebase'
 import { invalidateAlumnas } from '../alumnaCache'
 
@@ -27,6 +28,10 @@ export default function GestionAlumnas() {
   const [filtro, setFiltro] = useState('todas')
   const [diaSlot, setDiaSlot] = useState('lun')
   const [horaSlot, setHoraSlot] = useState('08:00')
+  const [cambiandoPass, setCambiandoPass] = useState(null)
+  const [newPass, setNewPass] = useState('')
+  const [newPassConfirm, setNewPassConfirm] = useState('')
+  const [guardandoPass, setGuardandoPass] = useState(false)
 
   function aplicarFiltro(lista, textoBusqueda, filtroActual) {
     const resultado = lista.filter(a => {
@@ -149,6 +154,37 @@ export default function GestionAlumnas() {
     setGuardando(false)
   }
 
+  async function cambiarContrasena(e) {
+    e.preventDefault()
+    if (newPass !== newPassConfirm) {
+      setMsg({ tipo: 'error', texto: 'Las contraseñas no coinciden.' })
+      return
+    }
+    if (newPass.length < 6) {
+      setMsg({ tipo: 'error', texto: 'La contraseña debe tener al menos 6 caracteres.' })
+      return
+    }
+    setGuardandoPass(true)
+    try {
+      const auth = getAuth()
+      const token = await auth.currentUser.getIdToken()
+      const res = await fetch('/api/set-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ uid: cambiandoPass.id, newPassword: newPass })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error')
+      setMsg({ tipo: 'exito', texto: `Contraseña de ${cambiandoPass.nombre} ${cambiandoPass.apellido} actualizada.` })
+      setCambiandoPass(null)
+      setNewPass('')
+      setNewPassConfirm('')
+    } catch (err) {
+      setMsg({ tipo: 'error', texto: err.message || 'No se pudo cambiar la contraseña.' })
+    }
+    setGuardandoPass(false)
+  }
+
   return (
     <div>
       <h3 style={{ color: '#2d5a3a', marginBottom: 20 }}>Gestión de alumnas</h3>
@@ -265,6 +301,10 @@ export default function GestionAlumnas() {
                           onClick={() => otorgarRecuperacion(a)}>
                           + Recuperación
                         </button>
+                        <button className="btn btn-ghost" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
+                          onClick={() => { setCambiandoPass(a); setNewPass(''); setNewPassConfirm('') }}>
+                          Contraseña
+                        </button>
                         <button className="btn btn-danger" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
                           onClick={() => setEliminando(a)}>
                           Dar de baja
@@ -356,6 +396,44 @@ export default function GestionAlumnas() {
               </button>
               <button className="btn btn-ghost" onClick={() => setEditando(null)} style={{ flex: 1 }}>Cancelar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal cambiar contraseña */}
+      {cambiandoPass && (
+        <div className="modal-overlay" onClick={() => setCambiandoPass(null)}>
+          <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+            <h3>Cambiar contraseña</h3>
+            <p style={{ color: '#5a6b60', margin: '8px 0 20px' }}>
+              <strong>{cambiandoPass.nombre} {cambiandoPass.apellido}</strong><br />
+              <span style={{ fontSize: '0.88rem' }}>{cambiandoPass.email}</span>
+            </p>
+            <form onSubmit={cambiarContrasena}>
+              <div className="input-group">
+                <label>Nueva contraseña</label>
+                <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)}
+                  placeholder="Mínimo 6 caracteres" required autoFocus />
+              </div>
+              <div className="input-group">
+                <label>Confirmar contraseña</label>
+                <input type="password" value={newPassConfirm} onChange={e => setNewPassConfirm(e.target.value)}
+                  placeholder="Repetir la contraseña" required />
+              </div>
+              {newPass && newPassConfirm && newPass !== newPassConfirm && (
+                <div className="alert alert-error" style={{ fontSize: '0.88rem', marginBottom: 12 }}>
+                  Las contraseñas no coinciden.
+                </div>
+              )}
+              <div className="modal-actions">
+                <button className="btn btn-primary" type="submit" disabled={guardandoPass} style={{ flex: 1 }}>
+                  {guardandoPass ? 'Guardando...' : 'Confirmar'}
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setCambiandoPass(null)} style={{ flex: 1 }}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
