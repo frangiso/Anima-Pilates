@@ -159,6 +159,7 @@ export default function Login() {
           </div>
           <form onSubmit={handleRecuperacion}>
             {error && <div className="alert alert-error">{error}</div>}
+            {resetMsg && <div className="alert alert-exito">{resetMsg}</div>}
             <div className="input-group">
               <label>Correo electrónico</label>
               <input type="email" value={recEmail} onChange={e => setRecEmail(e.target.value)}
@@ -174,6 +175,22 @@ export default function Login() {
               {loading ? 'Ingresando...' : 'Ingresar'}
             </button>
           </form>
+          <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.88rem' }}>
+            <button type="button"
+              onClick={async () => {
+                if (!recEmail) { setError('Ingresá tu email primero.'); return }
+                setError(''); setResetMsg('')
+                try {
+                  await sendPasswordResetEmail(auth, recEmail.trim().toLowerCase())
+                  setResetMsg('Te enviamos un email para restablecer tu contraseña.')
+                } catch {
+                  setError('No encontramos ese correo en el sistema.')
+                }
+              }}
+              style={{ background: 'none', border: 'none', color: '#5a6b60', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.88rem' }}>
+              Olvidé mi contraseña
+            </button>
+          </p>
         </div>
       </div>
     </div>
