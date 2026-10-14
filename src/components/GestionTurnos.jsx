@@ -65,18 +65,25 @@ export default function GestionTurnos() {
     // Otorgar recuperación (igual que cuando la alumna cancela su turno fijo)
     const mesActual = new Date().toISOString().substring(0, 7)
     const alumnaSnap = await getDoc(doc(db, 'usuarios', alumnaId))
+    let otorgoRecuperacion = false
     if (alumnaSnap.exists()) {
       const alumna = alumnaSnap.data()
-      const mismoMes = alumna.recuperacionesMes === mesActual
-      const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
-      await updateDoc(doc(db, 'usuarios', alumnaId), {
-        recuperacionesDisponibles: slotsActuales + 1,
-        recuperacionesMes: mesActual
-      })
+      if (!alumna.bloquearRecuperacion) {
+        const mismoMes = alumna.recuperacionesMes === mesActual
+        const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
+        await updateDoc(doc(db, 'usuarios', alumnaId), {
+          recuperacionesDisponibles: slotsActuales + 1,
+          recuperacionesMes: mesActual
+        })
+        otorgoRecuperacion = true
+      }
     }
     setModalDetalle(null)
     await cargar()
-    setMsg({ tipo: 'exito', texto: `${alumnaNombre} quitada del turno. Se otorgó 1 clase de recuperación.` })
+    setMsg({ tipo: 'exito', texto: otorgoRecuperacion
+      ? `${alumnaNombre} quitada del turno. Se otorgó 1 clase de recuperación.`
+      : `${alumnaNombre} quitada del turno.`
+    })
   }
 
   async function quitarDeTurnoGrilla(reservaId, alumnaNombre) {
@@ -101,8 +108,8 @@ export default function GestionTurnos() {
           }
         }
 
-        // Otorgar recuperación si era un turno fijo
-        if (reservaData?.tipo === 'fija') {
+        // Otorgar recuperación si era un turno fijo y no está bloqueada
+        if (reservaData?.tipo === 'fija' && !alumna.bloquearRecuperacion) {
           const mesActual = new Date().toISOString().substring(0, 7)
           const mismoMes = alumna.recuperacionesMes === mesActual
           const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
