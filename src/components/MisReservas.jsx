@@ -85,7 +85,7 @@ export default function MisReservas() {
           updates.clasesUsadas = Math.max(0, (alumna.clasesUsadas || 0) - 1)
         }
 
-        if (reserva.tipo === 'fija') {
+        if (reserva.tipo === 'fija' && !alumna.bloquearRecuperacion) {
           const mesActual = new Date().toISOString().substring(0, 7)
           const mismoMes = alumna.recuperacionesMes === mesActual
           const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
@@ -132,19 +132,23 @@ export default function MisReservas() {
       creadoEn: serverTimestamp()
     })
 
+    let ganoRecuperacion = false
     const alumnaSnap = await getDoc(doc(db, 'usuarios', user.uid))
     if (alumnaSnap.exists()) {
       const alumna = alumnaSnap.data()
-      const mesActual = new Date().toISOString().substring(0, 7)
-      const mismoMes = alumna.recuperacionesMes === mesActual
-      const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
-      await updateDoc(doc(db, 'usuarios', user.uid), {
-        recuperacionesDisponibles: slotsActuales + 1,
-        recuperacionesMes: mesActual
-      })
+      if (!alumna.bloquearRecuperacion) {
+        const mesActual = new Date().toISOString().substring(0, 7)
+        const mismoMes = alumna.recuperacionesMes === mesActual
+        const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
+        await updateDoc(doc(db, 'usuarios', user.uid), {
+          recuperacionesDisponibles: slotsActuales + 1,
+          recuperacionesMes: mesActual
+        })
+        ganoRecuperacion = true
+      }
     }
 
-    setMsg({ tipo: 'exito', texto: 'Turno cancelado. Ganaste 1 clase de recuperación.' })
+    setMsg({ tipo: 'exito', texto: ganoRecuperacion ? 'Turno cancelado. Ganaste 1 clase de recuperación.' : 'Turno cancelado.' })
     await cargar()
     setCancelando(null)
   }

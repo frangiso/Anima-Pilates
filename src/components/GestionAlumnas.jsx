@@ -138,6 +138,16 @@ export default function GestionAlumnas() {
     setMsg({ tipo: 'exito', texto: `Se otorgó 1 recuperación a ${alumna.nombre} ${alumna.apellido}.` })
   }
 
+  async function toggleBloqueoRecuperacion(alumna) {
+    const nuevo = !alumna.bloquearRecuperacion
+    await updateDoc(doc(db, 'usuarios', alumna.id), { bloquearRecuperacion: nuevo })
+    setAlumnas(prev => prev.map(a => a.id === alumna.id ? { ...a, bloquearRecuperacion: nuevo } : a))
+    setMsg({ tipo: 'exito', texto: nuevo
+      ? `Recuperación bloqueada para ${alumna.nombre} ${alumna.apellido}.`
+      : `Recuperación habilitada para ${alumna.nombre} ${alumna.apellido}.`
+    })
+  }
+
   async function confirmarEliminar() {
     if (!eliminando) return
     setGuardando(true)
@@ -264,6 +274,12 @@ export default function GestionAlumnas() {
                         <button className="btn btn-ghost" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
                           onClick={() => otorgarRecuperacion(a)}>
                           + Recuperación
+                        </button>
+                        <button
+                          className={`btn ${a.bloquearRecuperacion ? 'btn-danger' : 'btn-ghost'}`}
+                          style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
+                          onClick={() => toggleBloqueoRecuperacion(a)}>
+                          {a.bloquearRecuperacion ? '🚫 Rec. bloqueada' : 'Bloquear rec.'}
                         </button>
                         <button className="btn btn-danger" style={{ padding: '8px 14px', minHeight: 36, fontSize: '0.85rem' }}
                           onClick={() => setEliminando(a)}>

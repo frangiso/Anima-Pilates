@@ -138,10 +138,11 @@ export default function PanelDashboard() {
   }
 
   async function otorgarRecuperacion(alumnaId) {
-    const mesActual = new Date().toISOString().substring(0, 7)
     const alumnaSnap = await getDoc(doc(db, 'usuarios', alumnaId))
     if (!alumnaSnap.exists()) return
     const alumna = alumnaSnap.data()
+    if (alumna.bloquearRecuperacion) return
+    const mesActual = new Date().toISOString().substring(0, 7)
     const mismoMes = alumna.recuperacionesMes === mesActual
     const slotsActuales = mismoMes ? (alumna.recuperacionesDisponibles ?? 0) : 0
     await updateDoc(doc(db, 'usuarios', alumnaId), {
