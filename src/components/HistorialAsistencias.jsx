@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '../firebase'
+import { getAlumnas } from '../alumnaCache'
 
 export default function HistorialAsistencias() {
   const [reservas, setReservas] = useState([])
@@ -24,15 +25,38 @@ export default function HistorialAsistencias() {
       return d.toISOString().split('T')[0]
     })()
 
-    const q = filtroFechaHasta
-      ? query(collection(db, 'reservas'), where('fecha', '>=', desde), where('fecha', '<=', filtroFechaHasta), where('estado', 'in', ['confirmada', 'cancelada']))
-      : query(collection(db, 'reservas'), where('fecha', '>=', desde), where('estado', 'in', ['confirmada', 'cancelada']))
+    // Si hay filtro de alumna, buscar IDs desde caché para filtrar en Firestore
+    let alumnaIds = null
+    if (filtroAlumna.trim()) {
+      const todas = await getAlumnas()
+      const matches = todas.filter(a =>
+        `${a.nombre} ${a.apellido}`.toLowerCase().includes(filtroAlumna.toLowerCase())
+      )
+      if (matches.length > 0 && matches.length <= 10) {
+        alumnaIds = matches.map(a => a.id)
+      }
+    }
+
+    let q
+    if (alumnaIds && alumnaIds.length === 1) {
+      q = filtroFechaHasta
+        ? query(collection(db, 'reservas'), where('alumnaId', '==', alumnaIds[0]), where('fecha', '>=', desde), where('fecha', '<=', filtroFechaHasta), where('estado', 'in', ['confirmada', 'cancelada']))
+        : query(collection(db, 'reservas'), where('alumnaId', '==', alumnaIds[0]), where('fecha', '>=', desde), where('estado', 'in', ['confirmada', 'cancelada']))
+    } else if (alumnaIds && alumnaIds.length > 1) {
+      q = filtroFechaHasta
+        ? query(collection(db, 'reservas'), where('alumnaId', 'in', alumnaIds), where('fecha', '>=', desde), where('fecha', '<=', filtroFechaHasta), where('estado', 'in', ['confirmada', 'cancelada']))
+        : query(collection(db, 'reservas'), where('alumnaId', 'in', alumnaIds), where('fecha', '>=', desde), where('estado', 'in', ['confirmada', 'cancelada']))
+    } else {
+      q = filtroFechaHasta
+        ? query(collection(db, 'reservas'), where('fecha', '>=', desde), where('fecha', '<=', filtroFechaHasta), where('estado', 'in', ['confirmada', 'cancelada']))
+        : query(collection(db, 'reservas'), where('fecha', '>=', desde), where('estado', 'in', ['confirmada', 'cancelada']))
+    }
 
     const snap = await getDocs(q)
     let lista = snap.docs.map(d => ({ id: d.id, ...d.data() }))
 
-    // Filtrar por alumna y hora en el cliente
-    if (filtroAlumna.trim()) {
+    // Filtrar en cliente solo si no se pudo filtrar en Firestore
+    if (filtroAlumna.trim() && !alumnaIds) {
       lista = lista.filter(r => r.alumnaNombre?.toLowerCase().includes(filtroAlumna.toLowerCase()))
     }
     if (filtroHora) {
