@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { collection, getDocs, doc, updateDoc, addDoc, serverTimestamp, query, where } from 'firebase/firestore'
+import { collection, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
+import { getAlumnas } from '../alumnaCache'
 
 export default function GestionPagos() {
   const [alumnas, setAlumnas] = useState([])
@@ -35,8 +36,7 @@ export default function GestionPagos() {
   async function buscar() {
     setCargando(true)
     setBuscado(true)
-    const snap = await getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
-    const todas = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    const todas = await getAlumnas()
     setAlumnas(aplicarFiltro(todas, busqueda, filtro))
     setCargando(false)
   }

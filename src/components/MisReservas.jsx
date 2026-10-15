@@ -38,9 +38,10 @@ export default function MisReservas() {
   async function cargar() {
     setCargando(true)
     try {
+      const hoyStr = fechaLocal(new Date())
       const [snap, canceladasSnap, alumnaSnap] = await Promise.all([
         getDocs(query(collection(db, 'reservas'), where('alumnaId', '==', user.uid), where('estado', 'in', ['confirmada', 'pendiente']))),
-        getDocs(query(collection(db, 'reservas'), where('alumnaId', '==', user.uid), where('estado', '==', 'cancelada'))),
+        getDocs(query(collection(db, 'reservas'), where('alumnaId', '==', user.uid), where('estado', '==', 'cancelada'), where('fecha', '>=', hoyStr))),
         getDoc(doc(db, 'usuarios', user.uid))
       ])
       const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }))

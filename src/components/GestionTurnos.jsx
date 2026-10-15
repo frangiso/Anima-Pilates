@@ -129,17 +129,9 @@ export default function GestionTurnos() {
   }
 
   useEffect(() => {
-    cargarAlumnas()
     cargarFeriados()
   }, [])
   useEffect(() => { cargar() }, [semana])
-
-  async function cargarAlumnas() {
-    const todas = await getAlumnas()
-    const lista = todas.filter(u => u.estado !== 'inactiva')
-    lista.sort((a, b) => (a.apellido || '').localeCompare(b.apellido || ''))
-    setAlumnas(lista)
-  }
 
   async function cargarFeriados() {
     const snap = await getDocs(collection(db, 'feriados'))
@@ -152,7 +144,7 @@ export default function GestionTurnos() {
     const [snapRes, snapBloq, todasAlumnas] = await Promise.all([
       getDocs(query(collection(db, 'reservas'), where('fecha', 'in', fechas))),
       getDocs(query(collection(db, 'bloqueados'), where('fecha', 'in', fechas))),
-      getAlumnas(true),
+      getAlumnas(),
     ])
     setReservas(snapRes.docs.map(d => ({ id: d.id, ...d.data() })))
     setBloqueados(snapBloq.docs.map(d => ({ id: d.id, ...d.data() })))

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { collection, getDocs, doc, updateDoc, addDoc, query, where, Timestamp, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
-import { invalidateAlumnas } from '../alumnaCache'
+import { getAlumnas, invalidateAlumnas } from '../alumnaCache'
 
 const PLANES = ['Plan mensual — 2 veces/semana', 'Plan mensual — 3 veces/semana', 'Plan mensual — libre', 'Pack 8 clases', 'Pack 12 clases', 'Clase suelta']
 
@@ -47,8 +47,7 @@ export default function GestionAlumnas() {
     setCargando(true)
     setBuscado(true)
 
-    const snap = await getDocs(query(collection(db, 'usuarios'), where('rol', '==', 'alumna')))
-    const todas = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    const todas = await getAlumnas()
     setAlumnas(aplicarFiltro(todas, busqueda, filtro))
     setCargando(false)
   }

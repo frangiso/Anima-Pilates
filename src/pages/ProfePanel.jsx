@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { signOut } from 'firebase/auth'
 import { useNavigate } from 'react-router-dom'
-import { collection, query, where, getDocs } from 'firebase/firestore'
+import { collection, query, where, getDocs, limit } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import PanelDashboard from '../components/PanelDashboard'
@@ -92,7 +92,7 @@ export default function ProfePanel() {
 
   async function cargarNotif() {
     try {
-      const snap = await getDocs(query(collection(db, 'notificaciones'), where('leida', '==', false)))
+      const snap = await getDocs(query(collection(db, 'notificaciones'), where('leida', '==', false), limit(100)))
       setNotifNoLeidas(snap.size)
     } catch { }
   }
